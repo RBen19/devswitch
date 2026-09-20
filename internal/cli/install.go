@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -19,7 +18,7 @@ func installCommand() *cobra.Command {
 	var yes bool
 	command := &cobra.Command{
 		Use:     "install",
-		Short:   "Add the Go bin directory to PATH",
+		Short:   "Add the devswitch directory to PATH",
 		Long:    "Prepare your shell to use devswitch from any directory.",
 		Args:    cobra.NoArgs,
 		Example: "  devswitch install\n  devswitch install --yes",
@@ -32,7 +31,7 @@ func installCommand() *cobra.Command {
 }
 
 func installPath(in io.Reader, out io.Writer, yes bool) error {
-	pathDir, err := goBinDir()
+	pathDir, err := executableDir()
 	if err != nil {
 		return err
 	}
@@ -80,19 +79,16 @@ func installPath(in io.Reader, out io.Writer, yes bool) error {
 	return nil
 }
 
-func goBinDir() (string, error) {
-	if configured := os.Getenv("GOBIN"); configured != "" {
-		return configured, nil
-	}
-	output, err := exec.Command("go", "env", "GOPATH").Output()
+func executableDir() (string, error) {
+	executable, err := os.Executable()
 	if err != nil {
-		return "", fmt.Errorf("trouver le GOPATH: %w", err)
+		return "", fmt.Errorf("resolve devswitch executable: %w", err)
 	}
-	paths := filepath.SplitList(strings.TrimSpace(string(output)))
-	if len(paths) == 0 || paths[0] == "" {
-		return "", errors.New("GOPATH not found")
+	resolved, err := filepath.EvalSymlinks(executable)
+	if err == nil {
+		executable = resolved
 	}
-	return filepath.Join(paths[0], "bin"), nil
+	return filepath.Dir(executable), nil
 }
 
 func shellConfigFile() (string, error) {

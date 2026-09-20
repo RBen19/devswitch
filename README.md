@@ -24,13 +24,19 @@ devswitch run codex travail -- --full-auto
 
 Profiles live under `~/.devswitch/profiles` and metadata under `~/.devswitch/profiles.json`, with restrictive local permissions. Authentication is delegated to the official provider CLIs and their browser flows.
 
-## Build
+## Build and runtime requirements
+
+Go is required only to build or install devswitch from source. It is not required to run a compiled devswitch binary.
+
+Development commands:
 
 ```bash
 go build -ldflags "-X github.com/RBen19/devswitch/internal/cli.version=0.1.0" -o devswitch ./cmd/devswitch
+make build
+make test
 ```
 
-To use `devswitch` directly from any directory:
+`make install` also requires Go and installs the binary into Go's user bin directory. After that, to use `devswitch` directly from any directory:
 
 ```bash
 make install
@@ -41,13 +47,15 @@ Add this line to `~/.zshrc` to keep it after restarting your terminal.
 
 From the project directory, use `./devswitch` if the binary is not installed in `PATH` yet.
 
-After installing the binary, devswitch can configure `PATH` automatically:
+After installing or downloading a compiled binary, devswitch can configure `PATH` automatically without requiring Go:
 
 ```bash
-devswitch install
+./devswitch install
 ```
 
-The command asks for confirmation, detects zsh or bash, avoids duplicates, and only changes the shell configuration file. Use `devswitch install --yes` to skip confirmation.
+The command uses the directory containing the current executable, asks for confirmation, detects zsh or bash, avoids duplicates, and only changes the shell configuration file. Use `./devswitch install --yes` to skip confirmation.
+
+The project never assumes a fixed machine path such as `/home/user/project`. User directories are resolved at runtime, and profile data is stored under the current user's `~/.devswitch` directory.
 
 ## Deliberately limited scope
 
