@@ -1,0 +1,112 @@
+package cli
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/spf13/cobra"
+)
+
+const pathMarker = "# devswitch: managed PATH"
+
+func installCommand() *cobra.Command {
+	var yes bool
+	command := &cobra.Command{
+		Use:     "install",
+		Short:   "Add the Go bin directory to PATH",
+		Long:    "Prepare your shell to use devswitch from any directory.",
+		Args:    cobra.NoArgs,
+		Example: "  devswitch install\n  devswitch install --yes",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return installPath(cmd.InOrStdin(), cmd.OutOrStdout(), yes)
+		},
+	}
+	command.Flags().BoolVarP(&yes, "yes", "y", false, "skip confirmation")
+	return command
+}
+
+func installPath(in io.Reader, out io.Writer, yes bool) error {
+	pathDir, err := goBinDir()
+	if err != nil {
+		return err
+	}
+	configFile, err := shellConfigFile()
+	if err != nil {
+		return err
+	}
+	line := fmt.Sprintf("%s\nexport PATH=\"%s:$PATH\"\n", pathMarker, pathDir)
+
+	content, err := os.ReadFile(configFile)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("lire %s: %w", configFile, err)
+	}
+	if strings.Contains(string(content), pathMarker) || strings.Contains(string(content), "export PATH=\""+pathDir+":$PATH\"") {
+		fmt.Fprintf(out, "✓ PATH is already configured in %s\n", configFile)
+		return nil
+	}
+
+	if !yes {
+		fmt.Fprintf(out, "Add %s to PATH through %s? [y/N] ", pathDir, configFile)
+		answer, readErr := bufio.NewReader(in).ReadString('\n')
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return fmt.Errorf("lire la confirmation: %w", readErr)
+		}
+		answer = strings.TrimSpace(strings.ToLower(answer))
+		if answer != "y" && answer != "yes" {
+			fmt.Fprintln(out, "Installation cancelled.")
+			return nil
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(configFile), 0o700); err != nil {
+		return fmt.Errorf("create shell directory: %w", err)
+	}
+	file, err := os.OpenFile(configFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return fmt.Errorf("ouvrir %s: %w", configFile, err)
+	}
+	defer file.Close()
+	if _, err := file.WriteString("\n" + line); err != nil {
+		return fmt.Errorf("update %s: %w", configFile, err)
+	}
+	fmt.Fprintf(out, "✓ PATH configured in %s\n", configFile)
+	fmt.Fprintln(out, "Open a new terminal, or run: source", configFile)
+	return nil
+}
+
+func goBinDir() (string, error) {
+	if configured := os.Getenv("GOBIN"); configured != "" {
+		return configured, nil
+	}
+	output, err := exec.Command("go", "env", "GOPATH").Output()
+	if err != nil {
+		return "", fmt.Errorf("trouver le GOPATH: %w", err)
+	}
+	paths := filepath.SplitList(strings.TrimSpace(string(output)))
+	if len(paths) == 0 || paths[0] == "" {
+		return "", errors.New("GOPATH not found")
+	}
+	return filepath.Join(paths[0], "bin"), nil
+}
+
+func shellConfigFile() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home directory: %w", err)
+	}
+	shell := filepath.Base(os.Getenv("SHELL"))
+	switch shell {
+	case "zsh":
+		return filepath.Join(home, ".zshrc"), nil
+	case "bash":
+		return filepath.Join(home, ".bashrc"), nil
+	default:
+		return "", fmt.Errorf("shell %q is not supported automatically; add PATH manually", shell)
+	}
+}
