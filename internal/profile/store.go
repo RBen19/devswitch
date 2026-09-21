@@ -85,6 +85,28 @@ func (s *Store) Add(p provider.Provider, name string) (Profile, error) {
 	return item, s.Save()
 }
 
+func (s *Store) Adopt(p provider.Provider, name, home string) (Profile, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.ContainsAny(name, `/\\`) {
+		return Profile{}, errors.New("profile name must be simple, for example: personal or work")
+	}
+	if _, err := s.Find(p.ID, name); err == nil {
+		return Profile{}, fmt.Errorf("profile %s/%s already exists", p.ID, name)
+	}
+	if info, err := os.Stat(home); err != nil || !info.IsDir() {
+		return Profile{}, fmt.Errorf("existing provider configuration not found at %s", home)
+	}
+	item := Profile{Provider: p.ID, Name: name, Home: home}
+	s.Profiles = append(s.Profiles, item)
+	sort.Slice(s.Profiles, func(i, j int) bool {
+		if s.Profiles[i].Provider == s.Profiles[j].Provider {
+			return s.Profiles[i].Name < s.Profiles[j].Name
+		}
+		return s.Profiles[i].Provider < s.Profiles[j].Provider
+	})
+	return item, s.Save()
+}
+
 func (s *Store) Find(p provider.ID, name string) (Profile, error) {
 	for _, item := range s.Profiles {
 		if item.Provider == p && item.Name == name {

@@ -2,7 +2,9 @@ package provider
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 )
 
 type ID string
@@ -35,4 +37,12 @@ func (p Provider) Available() error {
 		return fmt.Errorf("%s was not found in PATH; install %s first", p.Binary, p.Binary)
 	}
 	return nil
+}
+
+func (p Provider) DefaultHome() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home directory: %w", err)
+	}
+	return filepath.Join(home, "."+string(p.ID)), nil
 }
