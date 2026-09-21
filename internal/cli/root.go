@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/RBen19/devswitch/internal/profile"
 	"github.com/RBen19/devswitch/internal/provider"
@@ -165,7 +166,11 @@ func launch(ctx context.Context, out io.Writer, providerName, name string, login
 		fmt.Fprintln(out, "Claude Code is starting. Type /login in the session to authenticate.")
 	}
 	command := exec.CommandContext(ctx, p.Binary, commandArgs...)
-	command.Env = append(os.Environ(), p.HomeEnvVar+"="+item.Home)
+	command.Env = os.Environ()
+	defaultHome, defaultHomeErr := p.DefaultHome()
+	if defaultHomeErr != nil || filepath.Clean(item.Home) != filepath.Clean(defaultHome) {
+		command.Env = append(command.Env, p.HomeEnvVar+"="+item.Home)
+	}
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
