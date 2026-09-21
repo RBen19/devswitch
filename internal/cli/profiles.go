@@ -20,8 +20,12 @@ func discoverCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if _, err := os.Stat(home); err == nil {
-					fmt.Fprintf(cmd.OutOrStdout(), "✓ Found %s configuration at %s\n  adopt it with: devswitch adopt %s <personal|work>\n", p.ID, home, p.ID)
+				installed := p.Available() == nil
+				_, configErr := os.Stat(home)
+				if installed && configErr == nil {
+					fmt.Fprintf(cmd.OutOrStdout(), "✓ Found %s and its configuration at %s\n  adopt it with: devswitch adopt %s <personal|work>\n", p.ID, home, p.ID)
+				} else if installed {
+					fmt.Fprintf(cmd.OutOrStdout(), "✓ Found %s (no default configuration at %s)\n", p.ID, home)
 				}
 			}
 			return nil
