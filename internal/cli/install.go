@@ -88,7 +88,8 @@ func installPath(in io.Reader, out io.Writer, yes bool) error {
 	}
 	fmt.Fprintf(out, "✓ PATH configured in %s\n", configFile)
 	fmt.Fprintln(out, "Open a new terminal, or run: source", configFile)
-	return nil
+	fmt.Fprintln(out, "Scanning for existing Claude Code and Codex installations...")
+	return discoverProviders(out)
 }
 
 func executableDir() (string, error) {
