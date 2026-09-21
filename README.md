@@ -4,6 +4,19 @@
 
 `devswitch` is a small local CLI that keeps Claude Code and Codex logins isolated. It delegates authentication to the official provider CLIs and never reads, copies, or manages credentials.
 
+## Why devswitch exists
+
+Developers often use more than one account with the same coding assistant: a personal account, a work account, or separate accounts for different clients and organizations. Most provider CLIs keep one active login and one shared configuration directory by default. Switching accounts manually can log out the previous account, mix sessions and settings, or require repetitive environment-variable commands.
+
+devswitch solves this by giving every provider account a named local profile. Each profile gets its own configuration directory, authentication state, sessions, and provider-specific settings. You can then launch the exact account you need with one predictable command:
+
+```bash
+devswitch run claude work
+devswitch run codex personal
+```
+
+The project is intentionally a lightweight profile manager, not a replacement for Claude Code or Codex. It does not automate provider login pages or handle credentials; it prepares the correct environment and lets the official CLI complete authentication securely.
+
 ## Requirements
 
 For building from source:
