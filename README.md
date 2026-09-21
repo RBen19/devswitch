@@ -2,64 +2,116 @@
 
 > Switch cleanly between Claude Code and Codex profiles. · by RBen19
 
-`devswitch` is a small local CLI that keeps provider logins isolated without copying or handling credentials.
+`devswitch` is a small local CLI that keeps Claude Code and Codex logins isolated. It delegates authentication to the official provider CLIs and never reads, copies, or manages credentials.
 
-## MVP
+## Requirements
 
-```bash
-go run ./cmd/devswitch add claude perso
-go run ./cmd/devswitch login claude perso
-go run ./cmd/devswitch run claude perso
+For building from source:
 
-go run ./cmd/devswitch add codex travail
-go run ./cmd/devswitch login codex travail
-go run ./cmd/devswitch run codex travail
-```
+- Git
+- Go 1.26 or newer
 
-Use `--` to pass arguments to the underlying tool:
+For using a provider profile, install the provider CLI separately:
 
-```bash
-devswitch run codex travail -- --full-auto
-```
+- Claude Code: the `claude` command must be available in `PATH`.
+- Codex: the `codex` command must be available in `PATH`.
 
-Profiles live under `~/.devswitch/profiles` and metadata under `~/.devswitch/profiles.json`, with restrictive local permissions. Authentication is delegated to the official provider CLIs and their browser flows.
+Go is required to build devswitch from source, but it is not required to run a compiled devswitch binary.
 
-## Build and runtime requirements
-
-Go is required only to build or install devswitch from source. It is not required to run a compiled devswitch binary.
-
-Development commands:
+## Quick start from a clone
 
 ```bash
-go build -ldflags "-X github.com/RBen19/devswitch/internal/cli.version=0.1.0" -o devswitch ./cmd/devswitch
+git clone <repository-url>
+cd devswitch
 make build
-make test
-```
-
-`make install` also requires Go and installs the binary into Go's user bin directory. After that, to use `devswitch` directly from any directory:
-
-```bash
-make install
-export PATH="$(go env GOPATH)/bin:$PATH"
-```
-
-Add this line to `~/.zshrc` to keep it after restarting your terminal.
-
-From the project directory, use `./devswitch` if the binary is not installed in `PATH` yet.
-
-After installing or downloading a compiled binary, devswitch can configure `PATH` automatically without requiring Go:
-
-```bash
 ./devswitch install
 ```
 
-The command uses the directory containing the current executable, asks for confirmation, detects zsh or bash, avoids duplicates, and only changes the shell configuration file. Use `./devswitch install --yes` to skip confirmation.
+`devswitch install` asks for confirmation, detects zsh or bash, and adds the directory containing the current executable to the appropriate shell configuration file. Reload the file it reports, or open a new terminal:
 
-The project never assumes a fixed machine path such as `/home/user/project`. User directories are resolved at runtime, and profile data is stored under the current user's `~/.devswitch` directory.
+```bash
+source ~/.zshrc   # zsh
+source ~/.bashrc  # bash
+```
+
+You can skip the confirmation with:
+
+```bash
+./devswitch install --yes
+```
+
+Then check the installation:
+
+```bash
+devswitch --help
+devswitch list
+```
+
+## Create and use profiles
+
+Create one profile per account or workspace:
+
+```bash
+devswitch add claude personal
+devswitch add claude work
+devswitch add codex personal
+devswitch add codex work
+```
+
+Authenticate a profile through the provider's official flow:
+
+```bash
+devswitch login claude personal
+```
+
+For Claude Code, type `/login` in the launched session. For Codex, the official browser login flow starts with `codex login`.
+
+Run a provider with a selected profile:
+
+```bash
+devswitch run claude work
+devswitch run codex personal
+```
+
+You can run different profiles at the same time in separate terminals. Pass arguments to the underlying CLI after `--`:
+
+```bash
+devswitch run codex work -- --full-auto
+```
+
+## Storage and isolation
+
+Profiles are stored under the current user's home directory:
+
+```text
+~/.devswitch/profiles/claude/personal
+~/.devswitch/profiles/claude/work
+~/.devswitch/profiles/codex/personal
+~/.devswitch/profiles/codex/work
+```
+
+The registry is stored in `~/.devswitch/profiles.json`. The paths are resolved at runtime; devswitch does not assume a specific username, home directory, or project location.
+
+Existing Claude Code and Codex installations remain unchanged. If a provider CLI is missing, devswitch reports that it must be installed first. Existing profiles are never overwritten by `devswitch add`.
+
+## Development commands
+
+```bash
+make build
+make test
+go vet ./...
+```
+
+`make install` uses Go to install the binary into Go's user bin directory. For a source installation, you may then add that directory to `PATH` with:
+
+```bash
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
 
 ## Deliberately limited scope
 
 - no credential scraping or token management;
-- no account API calls;
+- no provider account API calls;
 - no background daemon;
-- no automatic email/code handling.
+- no automatic email or verification-code handling;
+- no automatic installation of Claude Code or Codex.
