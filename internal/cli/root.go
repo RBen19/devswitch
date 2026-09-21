@@ -44,7 +44,7 @@ func NewRootCommand() *cobra.Command {
 		fmt.Fprintln(cmd.OutOrStdout(), "")
 		fmt.Fprintln(cmd.OutOrStdout(), cmd.UsageString())
 	})
-	root.AddCommand(addCommand(), listCommand(), loginCommand(), runCommand(), installCommand())
+	root.AddCommand(addCommand(), listCommand(), loginCommand(), runCommand(), installCommand(), uninstallCommand())
 	return root
 }
 
