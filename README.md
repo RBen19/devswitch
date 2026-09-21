@@ -69,6 +69,20 @@ You can skip the confirmation with:
 ./devswitch install --yes
 ```
 
+To remove the shell integration later:
+
+```bash
+devswitch uninstall
+```
+
+This removes only the PATH entry and preserves your profiles. To permanently delete all devswitch profiles and settings, use the explicit purge option:
+
+```bash
+devswitch uninstall --purge
+```
+
+The binary itself is not deleted automatically because it may have been installed by Go, a package manager, or a manual copy. The command prints its exact location so it can be removed safely.
+
 Then check the installation:
 
 ```bash
