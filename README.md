@@ -18,6 +18,22 @@ For using a provider profile, install the provider CLI separately:
 
 Go is required to build devswitch from source, but it is not required to run a compiled devswitch binary.
 
+### macOS
+
+macOS is supported on both Apple Silicon (`arm64`) and Intel (`amd64`). The default macOS shell is usually zsh, so `devswitch install` updates `~/.zshrc`. Bash is supported as well and uses `~/.bashrc`.
+
+Build the binary for the Mac you are using:
+
+```bash
+# Apple Silicon: M1, M2, M3, M4, ...
+GOOS=darwin GOARCH=arm64 go build -o devswitch ./cmd/devswitch
+
+# Intel Mac
+GOOS=darwin GOARCH=amd64 go build -o devswitch ./cmd/devswitch
+```
+
+The downloaded or built binary must match the Mac architecture. A Linux or Windows binary cannot run natively on macOS.
+
 ## Quick start from a clone
 
 ```bash
