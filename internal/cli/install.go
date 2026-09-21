@@ -39,13 +39,25 @@ func installPath(in io.Reader, out io.Writer, yes bool) error {
 	if err != nil {
 		return err
 	}
-	line := fmt.Sprintf("%s\nexport PATH=\"%s:$PATH\"\n", pathMarker, pathDir)
+	line := fmt.Sprintf("%s\nexport PATH=\"%s:$PATH\"\nalias dvsw='devswitch'\n", pathMarker, pathDir)
 
 	content, err := os.ReadFile(configFile)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("lire %s: %w", configFile, err)
 	}
 	if strings.Contains(string(content), pathMarker) || strings.Contains(string(content), "export PATH=\""+pathDir+":$PATH\"") {
+		if !strings.Contains(string(content), "alias dvsw='devswitch'") {
+			file, openErr := os.OpenFile(configFile, os.O_APPEND|os.O_WRONLY, 0o600)
+			if openErr != nil {
+				return fmt.Errorf("open %s: %w", configFile, openErr)
+			}
+			if _, writeErr := file.WriteString("alias dvsw='devswitch'\n"); writeErr != nil {
+				file.Close()
+				return fmt.Errorf("update %s: %w", configFile, writeErr)
+			}
+			file.Close()
+			fmt.Fprintf(out, "✓ Added dvsw shortcut to %s\n", configFile)
+		}
 		fmt.Fprintf(out, "✓ PATH is already configured in %s\n", configFile)
 		return nil
 	}

@@ -122,6 +122,23 @@ You can run different profiles at the same time in separate terminals. Pass argu
 devswitch run codex work -- --full-auto
 ```
 
+Shortcuts are available after `devswitch install` and a shell reload:
+
+```bash
+dvsw cl p       # devswitch run claude personal
+dvsw cl w       # devswitch run claude work
+dvsw cx p       # devswitch run codex personal
+dvsw cx w       # devswitch run codex work
+```
+
+Use `devswitch discover` to detect existing default provider configurations. Adopt one as a named profile without copying or moving it:
+
+```bash
+devswitch discover
+devswitch adopt claude personal
+devswitch adopt codex work
+```
+
 ## Storage and isolation
 
 Profiles are stored under the current user's home directory:

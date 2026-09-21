@@ -90,7 +90,7 @@ func removePathIntegration(configFile string) error {
 	filtered := make([]string, 0, len(lines))
 	for index := 0; index < len(lines); index++ {
 		if strings.TrimSpace(lines[index]) == pathMarker {
-			if index+1 < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[index+1]), "export PATH=") {
+			for index+1 < len(lines) && (strings.HasPrefix(strings.TrimSpace(lines[index+1]), "export PATH=") || strings.TrimSpace(lines[index+1]) == "alias dvsw='devswitch'") {
 				index++
 			}
 			continue
