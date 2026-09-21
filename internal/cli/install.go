@@ -88,7 +88,7 @@ func installPath(in io.Reader, out io.Writer, yes bool) error {
 	}
 	fmt.Fprintf(out, "✓ PATH configured in %s\n", configFile)
 	fmt.Fprintln(out, "Open a new terminal, or run: source", configFile)
-	fmt.Fprintln(out, "Scanning for existing Claude Code and Codex installations...")
+	fmt.Fprintln(out, "Scanning for existing Claude Code, Codex, and Gemini CLI installations...")
 	return discoverProviders(out)
 }
 
