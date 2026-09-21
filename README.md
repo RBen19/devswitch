@@ -197,6 +197,26 @@ go vet ./...
 export PATH="$(go env GOPATH)/bin:$PATH"
 ```
 
+## Contributing
+
+Contributions are welcome. Before opening a pull request:
+
+1. Create a focused branch for your change.
+2. Keep the CLI behavior and user-facing messages documented in English.
+3. Add or update tests, including an E2E test when the change affects a user workflow.
+4. Run the complete local checks:
+
+   ```bash
+   go test ./...
+   go vet ./...
+   git diff --check
+   ```
+
+5. Update the README when adding or changing commands.
+6. Open a pull request with a clear description of the problem, solution, and verification steps.
+
+Please do not include credentials, provider tokens, local profile directories, or generated binaries in commits.
+
 ## Deliberately limited scope
 
 - no credential scraping or token management;
