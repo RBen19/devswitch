@@ -56,7 +56,7 @@ make build
 ./devswitch install
 ```
 
-`devswitch install` asks for confirmation, detects zsh or bash, and adds the directory containing the current executable to the appropriate shell configuration file. Reload the file it reports, or open a new terminal:
+`devswitch install` asks for confirmation, detects zsh or bash, adds the directory containing the current executable to the appropriate shell configuration file, and scans for existing Claude Code and Codex installations. Reload the file it reports, or open a new terminal:
 
 ```bash
 source ~/.zshrc   # zsh
@@ -92,6 +92,33 @@ devswitch list
 
 ## Create and use profiles
 
+### Adopt an existing configuration
+
+If Claude Code or Codex was already installed and logged in before devswitch, discover it first:
+
+```bash
+devswitch discover
+```
+
+If an existing configuration is found, assign it a profile name that describes the account or workspace:
+
+```bash
+devswitch adopt claude personal
+devswitch adopt codex personal
+```
+
+Adoption reuses the existing configuration in place. It does not copy or move files, and it does not require logging in again. Choose `work`, `client-a`, or another name instead of `personal` when that better describes the account.
+
+Confirm the result and launch the adopted profiles:
+
+```bash
+devswitch list
+devswitch run claude personal
+devswitch run codex personal
+```
+
+### Create a fresh isolated profile
+
 Create one profile per account or workspace:
 
 ```bash
@@ -100,6 +127,8 @@ devswitch add claude work
 devswitch add codex personal
 devswitch add codex work
 ```
+
+`add` creates a new isolated configuration directory. It is the right command when you want a new account/workspace profile rather than adopting the provider's existing default configuration.
 
 Authenticate a profile through the provider's official flow:
 
