@@ -21,7 +21,7 @@ func discoverCommand() *cobra.Command {
 }
 
 func discoverProviders(out io.Writer) error {
-	for _, id := range []string{"claude", "codex"} {
+	for _, id := range []string{"claude", "codex", "gemini"} {
 		p, _ := provider.Parse(id)
 		home, err := p.DefaultHome()
 		if err != nil {
@@ -40,7 +40,7 @@ func discoverProviders(out io.Writer) error {
 
 func adoptCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:     "adopt <claude|codex> <name>",
+		Use:     "adopt <claude|codex|gemini> <name>",
 		Short:   "Use an existing provider configuration as a profile",
 		Args:    cobra.ExactArgs(2),
 		Example: "  devswitch adopt claude personal\n  devswitch adopt codex work",

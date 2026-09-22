@@ -30,8 +30,8 @@ func Execute() {
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:           appName,
-		Short:         "Switch cleanly between Claude Code and Codex profiles",
-		Long:          "devswitch keeps your Claude Code and Codex sessions isolated, easy to launch, and safe to share.",
+		Short:         "Switch cleanly between Claude Code, Codex, and Gemini CLI profiles",
+		Long:          "devswitch keeps your Claude Code, Codex, and Gemini CLI sessions isolated, easy to launch, and safe to share.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       version,
@@ -45,7 +45,7 @@ func NewRootCommand() *cobra.Command {
 		fmt.Fprintln(cmd.OutOrStdout(), "")
 		fmt.Fprintln(cmd.OutOrStdout(), cmd.UsageString())
 	})
-	root.AddCommand(addCommand(), listCommand(), loginCommand(), runCommand(), installCommand(), uninstallCommand(), discoverCommand(), adoptCommand(), shortcutCommand("cl", provider.Claude), shortcutCommand("cx", provider.Codex))
+	root.AddCommand(addCommand(), listCommand(), loginCommand(), runCommand(), installCommand(), uninstallCommand(), discoverCommand(), adoptCommand(), shortcutCommand("cl", provider.Claude), shortcutCommand("cx", provider.Codex), shortcutCommand("gm", provider.Gemini))
 	return root
 }
 
@@ -70,7 +70,7 @@ func getStore() (*profile.Store, error) {
 
 func addCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:     "add <claude|codex> <name>",
+		Use:     "add <claude|codex|gemini> <name>",
 		Short:   "Create an isolated profile",
 		Args:    cobra.ExactArgs(2),
 		Example: "  devswitch add claude perso\n  devswitch add codex travail",
@@ -119,7 +119,7 @@ func listCommand() *cobra.Command {
 
 func loginCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:     "login <claude|codex> <name>",
+		Use:     "login <claude|codex|gemini> <name>",
 		Short:   "Open the official login flow for a profile",
 		Args:    cobra.ExactArgs(2),
 		Example: "  devswitch login claude perso\n  devswitch login codex travail",
@@ -131,7 +131,7 @@ func loginCommand() *cobra.Command {
 
 func runCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:     "run <claude|codex> <name> [-- args...]",
+		Use:     "run <claude|codex|gemini> <name> [-- args...]",
 		Short:   "Run a tool with a profile",
 		Args:    cobra.MinimumNArgs(2),
 		Example: "  devswitch run claude perso\n  devswitch run codex travail -- --full-auto",

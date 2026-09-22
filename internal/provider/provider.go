@@ -12,6 +12,7 @@ type ID string
 const (
 	Claude ID = "claude"
 	Codex  ID = "codex"
+	Gemini ID = "gemini"
 )
 
 type Provider struct {
@@ -27,8 +28,10 @@ func Parse(value string) (Provider, error) {
 		return Provider{ID: Claude, Binary: "claude", HomeEnvVar: "CLAUDE_CONFIG_DIR"}, nil
 	case Codex:
 		return Provider{ID: Codex, Binary: "codex", HomeEnvVar: "CODEX_HOME", LoginArgs: []string{"login"}}, nil
+	case Gemini:
+		return Provider{ID: Gemini, Binary: "agy", HomeEnvVar: "HOME"}, nil
 	default:
-		return Provider{}, fmt.Errorf("unknown provider %q (accepted values: claude, codex)", value)
+		return Provider{}, fmt.Errorf("unknown provider %q (accepted values: claude, codex, gemini)", value)
 	}
 }
 
