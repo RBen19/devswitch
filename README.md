@@ -1,8 +1,8 @@
 # devswitch
 
-> Switch cleanly between Claude Code and Codex profiles. · by RBen19
+> Switch cleanly between Claude Code, Codex, and Gemini CLI profiles. · by RBen19
 
-`devswitch` is a small local CLI that keeps Claude Code and Codex logins isolated. It delegates authentication to the official provider CLIs and never reads, copies, or manages credentials.
+`devswitch` is a small local CLI that keeps Claude Code, Codex, and Gemini CLI logins isolated. It delegates authentication to the official provider CLIs and never reads, copies, or manages credentials.
 
 ## Why devswitch exists
 
@@ -13,9 +13,10 @@ devswitch solves this by giving every provider account a named local profile. Ea
 ```bash
 devswitch run claude work
 devswitch run codex personal
+devswitch run gemini work
 ```
 
-The project is intentionally a lightweight profile manager, not a replacement for Claude Code or Codex. It does not automate provider login pages or handle credentials; it prepares the correct environment and lets the official CLI complete authentication securely.
+The project is intentionally a lightweight profile manager, not a replacement for Claude Code, Codex, or Gemini CLI. It does not automate provider login pages or handle credentials; it prepares the correct environment and lets the official CLI complete authentication securely.
 
 ## Requirements
 
