@@ -8,6 +8,21 @@ import (
 	"testing"
 )
 
+const ptyRunner = `import os, pty, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp(sys.argv[1], sys.argv[1:])
+while True:
+    try:
+        data = os.read(fd, 4096)
+    except OSError:
+        break
+    if not data:
+        break
+    os.write(1, data)
+sys.exit(os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
+`
+
 func TestOnboardingShellsAliasesAndCompletion(t *testing.T) {
 	temp := filepath.Join(t.TempDir(), "space ' $(touch SHOULD_NOT_EXIST)")
 	if err := os.MkdirAll(temp, 0o700); err != nil {
@@ -63,12 +78,11 @@ func TestOnboardingShellsAliasesAndCompletion(t *testing.T) {
 			if shell == "zsh" {
 				command = "set -e; source \"$CONFIG_FILE\"; eval 'ds list; my-work --version'; (( $+functions[compdef] ))"
 			}
-			shellArgs := []string{"-c", command}
+			run := exec.Command(shellBin, "-c", command)
 			if shell == "zsh" {
-				// Completion only loads in interactive zsh; -i exercises it without a terminal.
-				shellArgs = []string{"-i", "-c", command}
+				// zsh drops interactive mode (and completion) without a terminal, so give it a pty.
+				run = exec.Command("python3", "-c", ptyRunner, shellBin, "-i", "-c", command)
 			}
-			run := exec.Command(shellBin, shellArgs...)
 			run.Env = append(env, "CONFIG_FILE="+config)
 			if data, err := run.CombinedOutput(); err != nil {
 				t.Fatalf("shell startup failed: %v\n%s", err, data)
