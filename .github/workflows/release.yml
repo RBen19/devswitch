@@ -1,0 +1,76 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish or retry
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install shells (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zsh fish
+      - name: Install shells (macOS)
+        if: runner.os == 'macOS'
+        run: brew install fish
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - run: python3 scripts/test_installer.py
+      - run: python3 scripts/test_release.py
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Package
+        run: scripts/release.sh "$RELEASE_TAG"
+      - name: Verify packaged release
+        run: python3 scripts/verify_release.py dist "$RELEASE_TAG"
+      - name: Publish without overwriting an existing release
+        run: python3 scripts/publish_release.py "$RELEASE_TAG" dist
+      - name: Test the public pinned installer
+        run: |
+          installer_home="$(mktemp -d)"
+          trap 'rm -rf "$installer_home"' EXIT
+          curl --proto '=https' --proto-redir '=https' -fsSL --retry 5 "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/install.sh" -o "$installer_home/install.sh"
+          HOME="$installer_home" SHELL=/bin/bash bash "$installer_home/install.sh" --version "$RELEASE_TAG" --shell bash
+          test -s "$installer_home/.devswitch/shell/completion.bash"
+          test -s "$installer_home/.bashrc"
+          HOME="$installer_home" bash "$installer_home/install.sh" --version "$RELEASE_TAG" --no-setup
+          "$installer_home/.local/bin/devswitch" --version

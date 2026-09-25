@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
+
+	"github.com/RBen19/devswitch/internal/fileutil"
 
 	"github.com/RBen19/devswitch/internal/provider"
 )
@@ -43,6 +46,23 @@ func Load(root string) (*Store, error) {
 	if err := json.Unmarshal(data, store); err != nil {
 		return nil, fmt.Errorf("decode profile registry: %w", err)
 	}
+	seen := make(map[string]bool)
+	for _, item := range store.Profiles {
+		if _, err := provider.Parse(string(item.Provider)); err != nil {
+			return nil, fmt.Errorf("invalid profile registry: %w", err)
+		}
+		if err := validateName(item.Name); err != nil {
+			return nil, fmt.Errorf("invalid profile registry: %w", err)
+		}
+		if item.Home == "" || !filepath.IsAbs(item.Home) {
+			return nil, fmt.Errorf("invalid profile registry: %s/%s needs an absolute home directory", item.Provider, item.Name)
+		}
+		key := string(item.Provider) + "/" + item.Name
+		if seen[key] {
+			return nil, fmt.Errorf("invalid profile registry: duplicate %s", key)
+		}
+		seen[key] = true
+	}
 	store.Root = root
 	return store, nil
 }
@@ -56,55 +76,95 @@ func (s *Store) Save() error {
 		return fmt.Errorf("encode profiles: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(filepath.Join(s.Root, "profiles.json"), data, 0o600); err != nil {
+	if err := fileutil.Write(filepath.Join(s.Root, "profiles.json"), data, 0o600); err != nil {
 		return fmt.Errorf("save profiles: %w", err)
 	}
 	return nil
 }
 
 func (s *Store) Add(p provider.Provider, name string) (Profile, error) {
-	name = strings.TrimSpace(name)
-	if name == "" || strings.ContainsAny(name, `/\\`) {
-		return Profile{}, errors.New("profile name must be simple, for example: personal or work")
-	}
-	if _, err := s.Find(p.ID, name); err == nil {
-		return Profile{}, fmt.Errorf("profile %s/%s already exists", p.ID, name)
-	}
-	home := filepath.Join(s.Root, "profiles", string(p.ID), name)
-	if err := os.MkdirAll(home, 0o700); err != nil {
-		return Profile{}, fmt.Errorf("create profile: %w", err)
-	}
-	item := Profile{Provider: p.ID, Name: name, Home: home}
-	s.Profiles = append(s.Profiles, item)
-	sort.Slice(s.Profiles, func(i, j int) bool {
-		if s.Profiles[i].Provider == s.Profiles[j].Provider {
-			return s.Profiles[i].Name < s.Profiles[j].Name
-		}
-		return s.Profiles[i].Provider < s.Profiles[j].Provider
-	})
-	return item, s.Save()
+	return s.create(p, name, "")
 }
 
 func (s *Store) Adopt(p provider.Provider, name, home string) (Profile, error) {
+	absolute, err := filepath.Abs(home)
+	if err != nil {
+		return Profile{}, err
+	}
+	return s.create(p, name, absolute)
+}
+
+func validateName(name string) error {
+	if name == "" || name == "." || name == ".." || strings.HasPrefix(name, "-") || strings.ContainsAny(name, `/\\`) || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return errors.New("profile name must be simple, for example: personal or work (no path components or control characters)")
+	}
+	return nil
+}
+
+func (s *Store) create(p provider.Provider, name, adoptedHome string) (Profile, error) {
 	name = strings.TrimSpace(name)
-	if name == "" || strings.ContainsAny(name, `/\\`) {
-		return Profile{}, errors.New("profile name must be simple, for example: personal or work")
+	if err := validateName(name); err != nil {
+		return Profile{}, err
 	}
-	if _, err := s.Find(p.ID, name); err == nil {
-		return Profile{}, fmt.Errorf("profile %s/%s already exists", p.ID, name)
+	if _, err := provider.Parse(string(p.ID)); err != nil {
+		return Profile{}, err
 	}
-	if info, err := os.Stat(home); err != nil || !info.IsDir() {
-		return Profile{}, fmt.Errorf("existing provider configuration not found at %s", home)
-	}
-	item := Profile{Provider: p.ID, Name: name, Home: home}
-	s.Profiles = append(s.Profiles, item)
-	sort.Slice(s.Profiles, func(i, j int) bool {
-		if s.Profiles[i].Provider == s.Profiles[j].Provider {
-			return s.Profiles[i].Name < s.Profiles[j].Name
+	var item Profile
+	err := fileutil.WithLock(filepath.Join(s.Root, "profiles.lock"), func() error {
+		current, err := Load(s.Root)
+		if err != nil {
+			return err
 		}
-		return s.Profiles[i].Provider < s.Profiles[j].Provider
+		if _, err := current.Find(p.ID, name); err == nil {
+			return fmt.Errorf("profile %s/%s already exists", p.ID, name)
+		}
+		home := adoptedHome
+		created := false
+		if home == "" {
+			home, err = filepath.Abs(filepath.Join(s.Root, "profiles", string(p.ID), name))
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(home), 0o700); err != nil {
+				return err
+			}
+			if err := os.Mkdir(home, 0o700); err != nil {
+				return fmt.Errorf("create profile (existing directories are never reused): %w", err)
+			}
+			created = true
+		} else {
+			if info, err := os.Stat(home); err != nil || !info.IsDir() {
+				return fmt.Errorf("existing provider configuration not found at %s", home)
+			}
+			canonical, err := filepath.EvalSymlinks(home)
+			if err != nil {
+				return err
+			}
+			for _, profile := range current.Profiles {
+				existing, err := filepath.EvalSymlinks(profile.Home)
+				if err == nil && existing == canonical {
+					return fmt.Errorf("directory already belongs to %s/%s", profile.Provider, profile.Name)
+				}
+			}
+		}
+		item = Profile{Provider: p.ID, Name: name, Home: home}
+		current.Profiles = append(current.Profiles, item)
+		sort.Slice(current.Profiles, func(i, j int) bool {
+			if current.Profiles[i].Provider == current.Profiles[j].Provider {
+				return current.Profiles[i].Name < current.Profiles[j].Name
+			}
+			return current.Profiles[i].Provider < current.Profiles[j].Provider
+		})
+		if err := current.Save(); err != nil {
+			if created {
+				_ = os.Remove(home)
+			}
+			return err
+		}
+		s.Profiles = current.Profiles
+		return nil
 	})
-	return item, s.Save()
+	return item, err
 }
 
 func (s *Store) Find(p provider.ID, name string) (Profile, error) {

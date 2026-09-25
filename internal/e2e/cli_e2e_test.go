@@ -56,6 +56,36 @@ func TestProfileLifecycleWithCompiledBinary(t *testing.T) {
 		t.Fatalf("Codex login command did not receive the login argument:\n%s", codexOutput)
 	}
 
+	for _, provider := range []string{"claude", "codex"} {
+		assertCLI(t, devswitch, env, "add", provider, "shared-target")
+		source := "personal"
+		if provider == "codex" {
+			source = "work"
+		}
+		targetHome := filepath.Join(home, ".devswitch", "profiles", provider, "shared-target")
+		preview := assertCLI(t, devswitch, env, "share", provider, source, "shared-target", "--dry-run")
+		if !strings.Contains(preview, "Dry run") {
+			t.Fatal("missing dry-run output")
+		}
+		if _, err := os.Lstat(filepath.Join(targetHome, "skills")); !os.IsNotExist(err) {
+			t.Fatal("dry run changed target")
+		}
+		assertCLI(t, devswitch, env, "share", provider, source, "shared-target")
+		sourceHome := filepath.Join(home, ".devswitch", "profiles", provider, source)
+		if err := os.WriteFile(filepath.Join(sourceHome, "skills", "example.md"), []byte("shared skill"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(targetHome, "skills", "example.md"))
+		if err != nil || string(data) != "shared skill" {
+			t.Fatalf("skill was not shared: %s, %v", data, err)
+		}
+		assertCLI(t, devswitch, env, "share", provider, source, "shared-target")
+		assertCLI(t, devswitch, env, "run", provider, "shared-target")
+		if !strings.Contains(readProviderOutput(t, outputFile), targetHome) {
+			t.Fatal("sharing changed the login home")
+		}
+	}
+
 	listOutput := assertCLI(t, devswitch, env, "list")
 	for _, expected := range []string{"claude", "personal", "codex", "work"} {
 		if !strings.Contains(listOutput, expected) {
