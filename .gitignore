@@ -1,3 +1,6 @@
 /devswitch
 /bin/
 .DS_Store
+
+dist/
+__pycache__/

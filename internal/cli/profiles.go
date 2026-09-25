@@ -1,38 +1,50 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/RBen19/devswitch/internal/provider"
 	"github.com/spf13/cobra"
 )
 
 func discoverCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "discover",
-		Short: "Detect installed providers and existing configurations",
-		Args:  cobra.NoArgs,
+	var jsonOutput bool
+	cmd := &cobra.Command{Use: "discover", Short: "Detect provider CLIs, existing configurations, and profiles", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if jsonOutput {
+				detections, err := detectProviders()
+				if err != nil {
+					return err
+				}
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(detections)
+			}
 			return discoverProviders(cmd.OutOrStdout())
-		},
-	}
+		}}
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "print machine-readable detection results")
+	return cmd
 }
-
 func discoverProviders(out io.Writer) error {
-	for _, id := range []string{"claude", "codex", "gemini"} {
-		p, _ := provider.Parse(id)
-		home, err := p.DefaultHome()
-		if err != nil {
-			return err
+	detections, err := detectProviders()
+	if err != nil {
+		return err
+	}
+	for _, d := range detections {
+		if d.Binary == "" {
+			fmt.Fprintf(out, "%s: CLI not found in PATH\n", d.Provider)
+		} else {
+			fmt.Fprintf(out, "%s: %s\n", d.Provider, d.Binary)
 		}
-		installed := p.Available() == nil
-		_, configErr := os.Stat(home)
-		if installed && configErr == nil {
-			fmt.Fprintf(out, "✓ Found %s and its configuration at %s\n  adopt it with: devswitch adopt %s <personal|work>\n", p.ID, home, p.ID)
-		} else if installed {
-			fmt.Fprintf(out, "✓ Found %s (no default configuration at %s)\n", p.ID, home)
+		if d.Configuration {
+			fmt.Fprintf(out, "  Existing configuration: %s\n", d.Home)
+		}
+		if len(d.Profiles) > 0 {
+			fmt.Fprintf(out, "  Profiles: %v\n", d.Profiles)
+		} else if d.Configuration {
+			fmt.Fprintf(out, "  Next: devswitch adopt %s personal\n", d.Provider)
+		} else {
+			fmt.Fprintf(out, "  Next: devswitch add %s personal\n", d.Provider)
 		}
 	}
 	return nil
@@ -69,10 +81,10 @@ func adoptCommand() *cobra.Command {
 
 func shortcutCommand(use string, p provider.ID) *cobra.Command {
 	return &cobra.Command{
-		Use:     use + " <profile>",
+		Use:     use + " <profile> [-- args...]",
 		Aliases: []string{string(p)},
 		Short:   "Run " + string(p) + " with a short command",
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		Example: "  dvsw " + use + " p\n  dvsw " + use + " work",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
@@ -82,7 +94,7 @@ func shortcutCommand(use string, p provider.ID) *cobra.Command {
 			if name == "w" {
 				name = "work"
 			}
-			return launch(cmd.Context(), cmd.OutOrStdout(), string(p), name, false, nil)
+			return launch(cmd.Context(), cmd.OutOrStdout(), string(p), name, false, args[1:])
 		},
 	}
 }

@@ -8,7 +8,7 @@
 
 Developers often use more than one account with the same coding assistant: a personal account, a work account, or separate accounts for different clients and organizations. Most provider CLIs keep one active login and one shared configuration directory by default. Switching accounts manually can log out the previous account, mix sessions and settings, or require repetitive environment-variable commands.
 
-devswitch solves this by giving every provider account a named local profile. Each profile gets its own configuration directory, authentication state, sessions, and provider-specific settings. You can then launch the exact account you need with one predictable command:
+devswitch solves this by giving every provider account a named local profile. By default, each profile gets its own configuration directory, authentication state, sessions, and provider-specific settings. You can optionally share sessions and reusable agent files between profiles of the same provider. You can then launch the exact account you need with one predictable command:
 
 ```bash
 devswitch run claude work
@@ -18,84 +18,108 @@ devswitch run gemini work
 
 The project is intentionally a lightweight profile manager, not a replacement for Claude Code, Codex, or Gemini CLI. It does not automate provider login pages or handle credentials; it prepares the correct environment and lets the official CLI complete authentication securely.
 
-## Requirements
+## Install
 
-For building from source:
+Supported platforms: macOS and Linux, on `arm64` or `amd64`. No Go installation or administrator privileges are needed for release binaries.
 
-- Git
-- Go 1.26 or newer
-
-For using a provider profile, install the provider CLI separately:
-
-- Claude Code: the `claude` command must be available in `PATH`.
-- Codex: the `codex` command must be available in `PATH`.
-
-Go is required to build devswitch from source, but it is not required to run a compiled devswitch binary.
-
-### macOS
-
-macOS is supported on both Apple Silicon (`arm64`) and Intel (`amd64`). The default macOS shell is usually zsh, so `devswitch install` updates `~/.zshrc`. Bash is supported as well and uses `~/.bashrc`.
-
-Build the binary for the Mac you are using:
+**Release status:** no release has been published yet. The command below works once the first release is published by CI; until then, build from source.
 
 ```bash
-# Apple Silicon: M1, M2, M3, M4, ...
-GOOS=darwin GOARCH=arm64 go build -o devswitch ./cmd/devswitch
-
-# Intel Mac
-GOOS=darwin GOARCH=amd64 go build -o devswitch ./cmd/devswitch
+curl -fsSL https://github.com/RBen19/devswitch/releases/latest/download/install.sh | bash
 ```
 
-The downloaded or built binary must match the Mac architecture. A Linux or Windows binary cannot run natively on macOS.
+The installer selects your platform, downloads a pinned release archive, verifies its SHA-256 checksum, checks that the binary runs, and atomically installs it into `~/.local/bin`. It then starts guided setup. Run the same command again to upgrade. Failed downloads and verification leave an existing binary untouched. Checksums detect corruption; they are distributed through the same GitHub release as the binaries, not an independent signature.
 
-## Quick start from a clone
+For automated or controlled installations:
 
 ```bash
-git clone <repository-url>
+curl -fsSL https://github.com/RBen19/devswitch/releases/latest/download/install.sh -o install.sh
+# Inspect the script, then choose an exact version and installation directory:
+bash install.sh --version v0.2.0 --install-dir "$HOME/.local/bin" --shell zsh
+# Install the binary only:
+bash install.sh --version v0.2.0 --no-setup
+```
+
+`DEVSWITCH_VERSION` and `DEVSWITCH_INSTALL_DIR` also set these defaults. Without an interactive terminal, setup accepts its documented defaults. `--no-setup` leaves shell files untouched. The installer requires Bash, curl, tar, and either `sha256sum` or `shasum`.
+
+### Build from source
+
+Requires Git and Go 1.26 or newer:
+
+```bash
+git clone https://github.com/RBen19/devswitch.git
 cd devswitch
 make build
 ./devswitch install
 ```
 
-`devswitch install` asks for confirmation, detects zsh or bash, adds the directory containing the current executable to the appropriate shell configuration file, and scans for existing Claude Code and Codex installations. Reload the file it reports, or open a new terminal:
+Install the official `claude`, `codex`, or Gemini CLI (`agy`) separately. devswitch discovers them through `PATH`; it does not download providers or handle their credentials.
+
+## Setup once
 
 ```bash
-source ~/.zshrc   # zsh
-source ~/.bashrc  # bash
+devswitch install                     # also available as devswitch setup
+devswitch install --shell zsh --yes   # accept defaults without prompts
 ```
 
-You can skip the confirmation with:
+Setup performs the following steps:
+
+1. Detect your shell and install PATH integration plus tab completion.
+2. Detect Claude Code, Codex, and Gemini CLI binaries and existing default configuration directories.
+3. Offer to adopt existing configurations as `personal`, preserving the login. Already-adopted homes are skipped; name conflicts receive an actionable message.
+4. Offer the `dvsw` shortcut and optional named profile shortcuts such as `cx-personal`.
+
+`--yes` enables completion, adopts detected configurations when `personal` is available, and adds `dvsw`. Additional per-profile aliases are offered only during interactive setup, or can be added anytime. Setup can be repeated to repair or refresh integration.
+
+Open a new terminal after setup, or run the `source` command it prints. Bash setup handles both interactive and login shells. Zsh honors `ZDOTDIR`; Fish honors `XDG_CONFIG_HOME`. Setup updates delimited blocks, preserves other shell content and symlinked dotfiles, and upgrades the previous devswitch PATH block. Existing shell commands and aliases take precedence over generated aliases.
+
+Tab completes providers, registered profile names, subcommands, and flags. For example, type `devswitch run codex ` and press Tab to see your Codex profiles. Completion is also configured for aliases of the main devswitch command. Profile launcher aliases pass subsequent arguments to the provider; provider-specific flag completion is not generated by devswitch.
+
+## Your shortcuts
 
 ```bash
-./devswitch install --yes
+devswitch alias add ds                 # ds runs devswitch
+devswitch alias add work-ai codex work # work-ai launches this profile
+devswitch alias list
+devswitch alias remove work-ai
 ```
 
-To remove the shell integration later:
+Alias changes refresh all shells configured by setup. Open a new terminal to load additions. Removal also prints an `unalias` command for your current terminal. Names cannot replace reserved commands or executables already in PATH.
+
+The built-in shortcuts work with or without shell aliases:
 
 ```bash
-devswitch uninstall
+devswitch cx work -- --full-auto
+devswitch cl personal
+dvsw cx w       # w means work; p means personal
 ```
 
-This removes only the PATH entry and preserves your profiles. To permanently delete all devswitch profiles and settings, use the explicit purge option:
+## Diagnose and automate
 
 ```bash
-devswitch uninstall --purge
+devswitch discover       # binaries, existing homes, and registered profiles
+devswitch doctor         # profile directories, broken links, shell integration, completion
+devswitch discover --json
+devswitch list --json
+devswitch doctor --json
 ```
 
-The binary itself is not deleted automatically because it may have been installed by Go, a package manager, or a manual copy. The command prints its exact location so it can be removed safely.
+`doctor` exits nonzero when a required check fails. A missing unused provider is fine when another provider is installed. Provider launches preserve the provider's exit code. JSON commands write data to stdout and errors to stderr; normal help contains no decorative banner.
 
-Then check the installation:
+## Uninstall
 
 ```bash
-devswitch --help
-devswitch list
+devswitch uninstall          # remove managed PATH, completion, and aliases
+devswitch uninstall --purge  # also permanently delete managed profiles and backups
 ```
+
+Uninstall cleans all shells recorded by setup and leaves unrelated shell configuration intact. Without `--purge`, profiles and saved alias preferences remain available for reinstalling. The binary is not deleted automatically; the command prints its location. Open a new terminal afterward.
 
 ## Create and use profiles
 
 ### Adopt an existing configuration
 
-If Claude Code or Codex was already installed and logged in before devswitch, discover it first:
+If Claude Code, Codex, or Gemini CLI was already installed and logged in before devswitch, discover it first:
 
 ```bash
 devswitch discover
@@ -161,13 +185,40 @@ dvsw cx p       # devswitch run codex personal
 dvsw cx w       # devswitch run codex work
 ```
 
-Use `devswitch discover` to detect existing default provider configurations. Adopt one as a named profile without copying or moving it:
+## Share data between profiles of the same provider
+
+Close the affected agents, then choose a source profile and one or more existing target profiles:
 
 ```bash
-devswitch discover
-devswitch adopt claude personal
-devswitch adopt codex work
+devswitch share codex personal work --dry-run
+devswitch share codex personal work
+devswitch share claude personal work client-a
+
+# Share just skills and agent definitions/instructions
+devswitch share claude personal work --only skills,agents
 ```
+
+Targets receive symlinks pointing to the source profile's data. Changes through either profile are shared. Codex links only to Codex; Claude links only to Claude. Adopted profiles also work as sources or targets. New profiles remain isolated until you run `share` for them.
+
+By default, all five categories below are selected. Use `--only` with a comma-separated list to narrow them:
+
+| Category | Codex paths | Claude paths |
+| --- | --- | --- |
+| `sessions` | `sessions/`, `archived_sessions/`, `history.jsonl`, `session_index.jsonl` | `projects/` (including project memory), `history.jsonl`, `file-history/`, `tasks/`, `plans/` |
+| `skills` | `skills/` | `skills/` |
+| `agents` | `agents/`, `AGENTS.md`, `AGENTS.override.md` | `agents/`, `agent-memory/`, `CLAUDE.md` |
+| `rules` | `rules/` | `rules/` |
+| `commands` | `prompts/` | `commands/` |
+
+Missing directories and JSONL files are initialized in the source. Instruction files are linked only if they already exist; rerun `share` after adding them. Repeating the command leaves existing links alone.
+
+Existing target paths are renamed to `<path>.devswitch-backup` (with a numeric suffix if needed). **Their contents are preserved in the backup, not merged into the shared data.** The command prints every link and backup path. `--dry-run` makes no filesystem changes. If linking fails, completed replacements are rolled back.
+
+Credentials, provider settings (`config.toml`, `settings.json`), plugins, caches, and SQLite databases remain per-profile. Custom paths configured in provider settings are not discovered. Codex agent definitions that require entries in `config.toml` still need those entries in each profile. User-wide skills outside the profile home are already independent of devswitch. Provider versions may use local database indexes for session lists; linking transcript files does not synchronize those indexes or guarantee every session appears in a provider's picker.
+
+Keep the source profile in place while its links are in use. To undo sharing, close the agents, remove the target symlink, and rename its printed backup back to the original path (or create a new empty directory/file if there was no backup). Removing a symlink does not delete its source data. `uninstall --purge` deletes managed source profiles and backups too, so adopted profiles pointing into them would be left with broken links.
+
+Storage references: [Codex configuration and state](https://learn.chatgpt.com/docs/config-file/config-advanced), [Claude directory layout](https://code.claude.com/docs/en/claude-directory).
 
 ## Storage and isolation
 
@@ -180,16 +231,18 @@ Profiles are stored under the current user's home directory:
 ~/.devswitch/profiles/codex/work
 ```
 
-The registry is stored in `~/.devswitch/profiles.json`. The paths are resolved at runtime; devswitch does not assume a specific username, home directory, or project location.
+The registry is stored in `~/.devswitch/profiles.json`; shell preferences are in `~/.devswitch/shell.json`. Registry and shell updates use atomic file replacement and process locks. Profile names cannot escape the storage directory. The paths are resolved at runtime; devswitch does not assume a specific username, home directory, or project location.
 
-Existing Claude Code and Codex installations remain unchanged. If a provider CLI is missing, devswitch reports that it must be installed first. Existing profiles are never overwritten by `devswitch add`.
+Existing Claude Code, Codex, and Gemini CLI installations remain unchanged unless you explicitly share data into an adopted profile. If a provider CLI is missing, devswitch reports that it must be installed first. Existing profiles are never overwritten by `devswitch add`.
 
 ## Development commands
 
 ```bash
 make build
 make test
+go test -race ./...
 go vet ./...
+python3 scripts/test_installer.py
 ```
 
 `make install` uses Go to install the binary into Go's user bin directory. For a source installation, you may then add that directory to `PATH` with:
@@ -224,4 +277,8 @@ Please do not include credentials, provider tokens, local profile directories, o
 - no provider account API calls;
 - no background daemon;
 - no automatic email or verification-code handling;
-- no automatic installation of Claude Code or Codex.
+- no automatic installation of Claude Code, Codex, or Gemini CLI.
+
+## Release process
+
+See [the release checklist](docs/releasing.md). CI tests the compiled CLI and shell workflows on Linux and macOS. Successful pushes to `master` automatically get the next patch tag (`v0.2.0`, `v0.2.1`, …) after CI passes. The shared release workflow packages all four platforms, verifies uploaded assets in a temporary draft, then publishes automatically. Pull requests and other branches run checks without creating tags. Manual version tags and release retries use the same workflow. Published assets are never overwritten.

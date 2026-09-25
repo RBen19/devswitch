@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/RBen19/devswitch/internal/profile"
@@ -31,9 +32,16 @@ func uninstallCommand() *cobra.Command {
 }
 
 func uninstall(in io.Reader, out io.Writer, purge, yes bool) error {
-	configFile, err := shellConfigFile()
+	settings, err := loadSettings()
 	if err != nil {
 		return err
+	}
+	shells := settings.Shells
+	if len(shells) == 0 {
+		sh, err := resolveShell("")
+		if err == nil {
+			shells = append(shells, sh)
+		}
 	}
 	root, err := profile.DefaultRoot()
 	if err != nil {
@@ -57,10 +65,22 @@ func uninstall(in io.Reader, out io.Writer, purge, yes bool) error {
 		}
 	}
 
-	if err := removePathIntegration(configFile); err != nil {
-		return err
+	for _, sh := range shells {
+		if err := removePathIntegration(sh.Config); err != nil {
+			return err
+		}
+		completion := filepath.Join(root, "shell", "completion."+sh.Name)
+		if err := os.Remove(completion); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		fmt.Fprintf(out, "Removed PATH, completion, and aliases from %s\n", sh.Config)
 	}
-	fmt.Fprintf(out, "✓ PATH integration removed from %s\n", configFile)
+	settings.Shells = nil
+	if !purge {
+		if err := saveSettings(settings); err != nil {
+			return err
+		}
+	}
 
 	if purge {
 		if err := os.RemoveAll(root); err != nil {
@@ -74,32 +94,6 @@ func uninstall(in io.Reader, out io.Writer, purge, yes bool) error {
 	executable, err := os.Executable()
 	if err == nil {
 		fmt.Fprintf(out, "Remove the binary manually if needed: %s\n", executable)
-	}
-	return nil
-}
-
-func removePathIntegration(configFile string) error {
-	data, err := os.ReadFile(configFile)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read %s: %w", configFile, err)
-	}
-	lines := strings.Split(string(data), "\n")
-	filtered := make([]string, 0, len(lines))
-	for index := 0; index < len(lines); index++ {
-		if strings.TrimSpace(lines[index]) == pathMarker {
-			for index+1 < len(lines) && (strings.HasPrefix(strings.TrimSpace(lines[index+1]), "export PATH=") || strings.TrimSpace(lines[index+1]) == "alias dvsw='devswitch'") {
-				index++
-			}
-			continue
-		}
-		filtered = append(filtered, lines[index])
-	}
-	updated := strings.Join(filtered, "\n")
-	if err := os.WriteFile(configFile, []byte(updated), 0o600); err != nil {
-		return fmt.Errorf("update %s: %w", configFile, err)
 	}
 	return nil
 }
