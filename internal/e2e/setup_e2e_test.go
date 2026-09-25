@@ -63,7 +63,12 @@ func TestOnboardingShellsAliasesAndCompletion(t *testing.T) {
 			if shell == "zsh" {
 				command = "set -e; source \"$CONFIG_FILE\"; eval 'ds list; my-work --version'; (( $+functions[compdef] ))"
 			}
-			run := exec.Command(shellBin, "-c", command)
+			shellArgs := []string{"-c", command}
+			if shell == "zsh" {
+				// Completion only loads in interactive zsh; -i exercises it without a terminal.
+				shellArgs = []string{"-i", "-c", command}
+			}
+			run := exec.Command(shellBin, shellArgs...)
 			run.Env = append(env, "CONFIG_FILE="+config)
 			if data, err := run.CombinedOutput(); err != nil {
 				t.Fatalf("shell startup failed: %v\n%s", err, data)

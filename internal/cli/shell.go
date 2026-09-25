@@ -138,9 +138,11 @@ func installShell(root *cobra.Command, sh shellLocation, aliases []Alias) error 
 		fmt.Fprintf(&block, "case \":$PATH:\" in *%s*) ;; *) export PATH=%s:\"$PATH\" ;; esac\n", q(":"+filepath.Dir(exe)+":"), q(filepath.Dir(exe)))
 	}
 	if sh.Name == "zsh" {
-		block.WriteString("if ! (( $+functions[compdef] )); then\n  autoload -Uz compinit && compinit\nfi\n")
+		// compinit needs a terminal on Linux; scripts that source .zshrc must not break.
+		fmt.Fprintf(&block, "if [[ -o interactive ]]; then\n  if ! (( $+functions[compdef] )); then\n    autoload -Uz compinit && compinit\n  fi\n  source %s\nfi\n", q(completionPath))
+	} else {
+		fmt.Fprintf(&block, "source %s\n", q(completionPath))
 	}
-	fmt.Fprintf(&block, "source %s\n", q(completionPath))
 	for _, alias := range aliases {
 		var args []string
 		args = append(args, q(exe))
@@ -159,7 +161,7 @@ func installShell(root *cobra.Command, sh shellLocation, aliases []Alias) error 
 			case "bash":
 				fmt.Fprintf(&block, "complete -o default -F __start_devswitch %s\n", alias.Name)
 			case "zsh":
-				fmt.Fprintf(&block, "compdef _devswitch %s\n", alias.Name)
+				fmt.Fprintf(&block, "(( $+functions[compdef] )) && compdef _devswitch %s\n", alias.Name)
 			case "fish":
 				fmt.Fprintf(&block, "complete -c %s -w devswitch\n", alias.Name)
 			}
