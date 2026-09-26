@@ -116,12 +116,13 @@ class PublishTests(unittest.TestCase):
             def gh(*args):
                 calls.append(args)
                 if '--paginate' in args:
-                    created = any(a[:2] == ('release', 'create') for a in calls)
-                    return json.dumps([[{'tag_name': 'v0.2.0', 'draft': True, 'id': 123}]] if created else [[]])
+                    return json.dumps([[]])
+                if 'POST' in args:
+                    return json.dumps({'id': 123, 'tag_name': 'v0.2.0', 'draft': True})
                 return ''
             with mock.patch.object(self.module, 'gh', side_effect=gh), mock.patch.object(self.module.subprocess, 'run'):
                 self.module.publish('v0.2.0', root)
-            self.assertTrue(any(args[:2] == ('release', 'create') for args in calls))
+            self.assertTrue(any('POST' in args and 'tag_name=v0.2.0' in args and 'draft=true' in args for args in calls))
             self.assertFalse(any('releases/tags/' in ' '.join(args) for args in calls))
             self.assertTrue(any('PATCH' in args and 'repos/{owner}/{repo}/releases/123' in args for args in calls))
 
