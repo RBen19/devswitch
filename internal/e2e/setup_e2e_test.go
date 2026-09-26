@@ -1,11 +1,13 @@
 package e2e_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const ptyRunner = `import os, pty, sys
@@ -78,10 +80,12 @@ func TestOnboardingShellsAliasesAndCompletion(t *testing.T) {
 			if shell == "zsh" {
 				command = "set -e; source \"$CONFIG_FILE\"; eval 'ds list; my-work --version'; (( $+functions[compdef] ))"
 			}
-			run := exec.Command(shellBin, "-c", command)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			run := exec.CommandContext(ctx, shellBin, "-c", command)
 			if shell == "zsh" {
 				// zsh drops interactive mode (and completion) without a terminal, so give it a pty.
-				run = exec.Command("python3", "-c", ptyRunner, shellBin, "-i", "-c", command)
+				run = exec.CommandContext(ctx, "python3", "-c", ptyRunner, shellBin, "-i", "-c", command)
 			}
 			run.Env = append(env, "CONFIG_FILE="+config)
 			if data, err := run.CombinedOutput(); err != nil {
