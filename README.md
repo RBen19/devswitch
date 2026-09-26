@@ -22,8 +22,6 @@ The project is intentionally a lightweight profile manager, not a replacement fo
 
 Supported platforms: macOS and Linux, on `arm64` or `amd64`. No Go installation or administrator privileges are needed for release binaries.
 
-**Release status:** no release has been published yet. The command below works once the first release is published by CI; until then, build from source.
-
 ```bash
 curl -fsSL https://github.com/RBen19/devswitch/releases/latest/download/install.sh | bash
 ```

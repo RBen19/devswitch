@@ -5,10 +5,22 @@ import pathlib
 import re
 import subprocess
 import sys
+import time
 
 
 def gh(*args):
     return subprocess.run(['gh', *args], check=True, capture_output=True, text=True).stdout
+
+
+def gh_retry(*args):
+    # gh resolves drafts by tag through the release list, which can lag for a moment.
+    for attempt in range(5):
+        try:
+            return gh(*args)
+        except subprocess.CalledProcessError:
+            if attempt == 4:
+                raise
+            time.sleep(5)
 
 
 def find_release(tag):
@@ -26,20 +38,20 @@ def publish(tag, directory):
         print(f'{tag} is already published; assets left unchanged')
         return
     if release is None:
-        gh('release', 'create', tag, '--verify-tag', '--draft', '--generate-notes', '--title', f'devswitch {tag}')
-        release = find_release(tag)
-        if release is None:
-            raise RuntimeError(f'Draft release for {tag} was not created')
+        # The API response carries the id; the release list lags behind creation.
+        release = json.loads(gh('api', '--method', 'POST', 'repos/{owner}/{repo}/releases',
+                                '-f', 'tag_name='+tag, '-f', 'name=devswitch '+tag,
+                                '-F', 'draft=true', '-F', 'generate_release_notes=true'))
     root = pathlib.Path(directory)
     assets = [root/'install.sh', root/'checksums.txt', *sorted(root.glob(f'devswitch_{tag[1:]}_*.tar.gz'))]
     if len(assets) != 6 or not all(p.is_file() for p in assets):
         raise ValueError('Expected installer, checksums, and four platform archives')
-    gh('release', 'upload', tag, *map(str, assets), '--clobber')
+    gh_retry('release', 'upload', tag, *map(str, assets), '--clobber')
     # Download and verify the draft before making it public. A failed upload or
     # verification leaves the draft resumable on the next workflow run.
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
-        gh('release', 'download', tag, '--dir', tmp)
+        gh_retry('release', 'download', tag, '--dir', tmp)
         subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name('verify_release.py')), tmp, tag], check=True)
     # Ask GitHub to determine latest server-side by semantic version, avoiding a
     # race where an older CI job finishes after a newer release has published.
