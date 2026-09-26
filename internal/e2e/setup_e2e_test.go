@@ -87,7 +87,8 @@ func TestOnboardingShellsAliasesAndCompletion(t *testing.T) {
 				// zsh drops interactive mode (and completion) without a terminal, so give it a pty.
 				run = exec.CommandContext(ctx, "python3", "-c", ptyRunner, shellBin, "-i", "-c", command)
 			}
-			run.Env = append(env, "CONFIG_FILE="+config)
+			// Ubuntu's /etc/zsh/zshrc runs its own compinit, which prompts on CI runners.
+			run.Env = append(env, "CONFIG_FILE="+config, "skip_global_compinit=1")
 			if data, err := run.CombinedOutput(); err != nil {
 				t.Fatalf("shell startup failed: %v\n%s", err, data)
 			}
