@@ -95,8 +95,6 @@ class PublishTests(unittest.TestCase):
                 calls.append(args)
                 if '--paginate' in args:
                     return json.dumps([[{'tag_name': 'v0.2.0', 'draft': True, 'id': 123}]])
-                if args[:2] == ('api', 'repos/{owner}/{repo}/releases/tags/v0.2.0'):
-                    return json.dumps({'id': 123})
                 return ''
             with mock.patch.object(self.module, 'gh', side_effect=gh), mock.patch.object(self.module.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'verify')):
                 with self.assertRaises(subprocess.CalledProcessError):
@@ -107,6 +105,25 @@ class PublishTests(unittest.TestCase):
                 self.module.publish('v0.2.0', root)
                 self.assertFalse(any(args[:2] == ('release', 'create') for args in calls))
                 self.assertTrue(any('PATCH' in args and 'make_latest=legacy' in args for args in calls))
+
+    def test_first_publish_finds_draft_through_listing(self):
+        # The releases/tags endpoint returns 404 for drafts, so the id must come from the listing.
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for name in ['install.sh', 'checksums.txt', *[f'devswitch_0.2.0_{system}_{arch}.tar.gz' for system in ('linux', 'darwin') for arch in ('amd64', 'arm64')]]:
+                (root/name).touch()
+            calls = []
+            def gh(*args):
+                calls.append(args)
+                if '--paginate' in args:
+                    created = any(a[:2] == ('release', 'create') for a in calls)
+                    return json.dumps([[{'tag_name': 'v0.2.0', 'draft': True, 'id': 123}]] if created else [[]])
+                return ''
+            with mock.patch.object(self.module, 'gh', side_effect=gh), mock.patch.object(self.module.subprocess, 'run'):
+                self.module.publish('v0.2.0', root)
+            self.assertTrue(any(args[:2] == ('release', 'create') for args in calls))
+            self.assertFalse(any('releases/tags/' in ' '.join(args) for args in calls))
+            self.assertTrue(any('PATCH' in args and 'repos/{owner}/{repo}/releases/123' in args for args in calls))
 
 
 if __name__ == '__main__':
