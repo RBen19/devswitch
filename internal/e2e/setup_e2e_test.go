@@ -25,6 +25,68 @@ while True:
 sys.exit(os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
 `
 
+func TestSetupSharingMergesExistingAndNewProfiles(t *testing.T) {
+	temp := t.TempDir()
+	home := filepath.Join(temp, "home")
+	binary := filepath.Join(temp, "devswitch")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/devswitch")
+	build.Dir = projectRoot(t)
+	if data, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v %s", err, data)
+	}
+	env := append(os.Environ(), "HOME="+home, "SHELL=/bin/bash")
+	personal := filepath.Join(home, ".claude")
+	work := filepath.Join(home, ".devswitch", "profiles", "claude", "work")
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(personal, "projects", "repo", "a.jsonl"), "a\n")
+	write(filepath.Join(personal, "projects", "repo", "memory", "MEMORY.md"), "personal memory")
+	write(filepath.Join(personal, "history.jsonl"), "p\n")
+	assertCLI(t, binary, env, "add", "claude", "work")
+	write(filepath.Join(work, "projects", "repo", "b.jsonl"), "b\n")
+	write(filepath.Join(work, "projects", "repo", "memory", "MEMORY.md"), "work memory")
+	write(filepath.Join(work, "history.jsonl"), "w\n")
+
+	setup := exec.Command(binary, "install", "--shell", "bash")
+	setup.Env = env
+	setup.Stdin = strings.NewReader("y\ny\ny\nn\nn\nn\n")
+	if data, err := setup.CombinedOutput(); err != nil {
+		t.Fatalf("setup: %v %s", err, data)
+	}
+	expect := map[string]string{
+		filepath.Join(work, "projects", "repo", "a.jsonl"):                              "a\n",
+		filepath.Join(work, "projects", "repo", "b.jsonl"):                              "b\n",
+		filepath.Join(work, "projects", "repo", "memory", "MEMORY.md"):                  "personal memory",
+		filepath.Join(work, "projects.devswitch-backup", "repo", "memory", "MEMORY.md"): "work memory",
+		filepath.Join(work, "history.jsonl"):                                            "p\nw\n",
+		filepath.Join(personal, "projects", "repo", "b.jsonl"):                          "b\n",
+	}
+	for path, want := range expect {
+		if data, err := os.ReadFile(path); err != nil || string(data) != want {
+			t.Fatalf("%s: got %q, %v; want %q", path, data, err, want)
+		}
+	}
+
+	assertCLI(t, binary, env, "add", "claude", "later")
+	assertCLI(t, binary, env, "add", "claude", "solo", "--no-share")
+	if info, err := os.Lstat(filepath.Join(home, ".devswitch", "profiles", "claude", "later", "projects")); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("new profile was not shared: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(home, ".devswitch", "profiles", "claude", "solo", "projects")); !os.IsNotExist(err) {
+		t.Fatal("--no-share profile was linked")
+	}
+	if again := assertCLI(t, binary, env, "install", "--shell", "bash"); !strings.Contains(again, "already set up") {
+		t.Fatalf("setup ran twice: %s", again)
+	}
+}
+
 func TestOnboardingShellsAliasesAndCompletion(t *testing.T) {
 	temp := filepath.Join(t.TempDir(), "space ' $(touch SHOULD_NOT_EXIST)")
 	if err := os.MkdirAll(temp, 0o700); err != nil {
