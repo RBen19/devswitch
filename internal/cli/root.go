@@ -74,7 +74,8 @@ func getStore() (*profile.Store, error) {
 }
 
 func addCommand() *cobra.Command {
-	return &cobra.Command{
+	var noShare bool
+	command := &cobra.Command{
 		Use:     "add <claude|codex|gemini> <name>",
 		Short:   "Create an isolated profile",
 		Args:    cobra.ExactArgs(2),
@@ -93,10 +94,17 @@ func addCommand() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Profile %s/%s created\n  directory: %s\n", p.ID, created.Name, created.Home)
+			if !noShare {
+				if err := shareNewProfile(cmd.OutOrStdout(), store, p, created.Name); err != nil {
+					return err
+				}
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "  next step: devswitch login %s %s\n", p.ID, created.Name)
 			return nil
 		},
 	}
+	command.Flags().BoolVar(&noShare, "no-share", false, "keep this profile isolated even if setup enabled sharing")
+	return command
 }
 
 func listCommand() *cobra.Command {

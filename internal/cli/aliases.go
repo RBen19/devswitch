@@ -23,6 +23,8 @@ type Alias struct {
 type shellSettings struct {
 	Aliases []Alias         `json:"aliases"`
 	Shells  []shellLocation `json:"shells"`
+	// Share maps a provider to the profile whose data new profiles link to.
+	Share map[string]string `json:"share,omitempty"`
 }
 
 func loadSettings() (shellSettings, error) {

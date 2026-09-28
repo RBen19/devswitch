@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"github.com/RBen19/devswitch/internal/provider"
 	"github.com/spf13/cobra"
@@ -23,14 +24,21 @@ func installCommand() *cobra.Command {
 			}
 			reader := bufio.NewReader(cmd.InOrStdin())
 			out := cmd.OutOrStdout()
+			settings, err := loadSettings()
+			if err != nil {
+				return err
+			}
+			if slices.Contains(settings.Shells, sh) {
+				if err := refreshShells(cmd.Root(), settings); err != nil {
+					return err
+				}
+				fmt.Fprintf(out, "devswitch is already set up for %s; shell integration refreshed.\n", sh.Name)
+				return nil
+			}
 			fmt.Fprintf(out, "Shell: %s\nConfiguration: %s\n", sh.Name, sh.Config)
 			if !yes && !confirm(reader, out, "Install PATH and tab completion?", true) {
 				fmt.Fprintln(out, "Setup cancelled.")
 				return nil
-			}
-			settings, err := loadSettings()
-			if err != nil {
-				return err
 			}
 			store, err := getStore()
 			if err != nil {
@@ -70,6 +78,37 @@ func installCommand() *cobra.Command {
 					}
 					fmt.Fprintf(out, "Adopted %s/personal (existing login preserved).\n", id)
 				}
+			}
+			for _, id := range []provider.ID{provider.Claude, provider.Codex} {
+				if yes || settings.Share[string(id)] != "" {
+					continue
+				}
+				var names []string
+				for _, item := range store.Profiles {
+					if item.Provider == id {
+						names = append(names, item.Name)
+					}
+				}
+				if len(names) == 0 {
+					continue
+				}
+				source := names[0]
+				if slices.Contains(names, "personal") {
+					source = "personal"
+				}
+				if !confirm(reader, out, fmt.Sprintf("Share sessions, memory, skills and agents of %s/%s with all other %s profiles, including new ones? Close running agents first.", id, source, id), false) {
+					continue
+				}
+				p, _ := provider.Parse(string(id))
+				if targets := slices.DeleteFunc(names, func(name string) bool { return name == source }); len(targets) > 0 {
+					if err := shareAll(out, store, p, source, targets); err != nil {
+						return err
+					}
+				}
+				if settings.Share == nil {
+					settings.Share = map[string]string{}
+				}
+				settings.Share[string(id)] = source
 			}
 			if !hasAlias(settings.Aliases, "dvsw") && (yes || confirm(reader, out, "Add 'dvsw' as a shortcut for devswitch?", true)) {
 				if err := validateAlias("dvsw"); err != nil {

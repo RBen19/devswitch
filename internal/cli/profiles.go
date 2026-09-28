@@ -51,7 +51,8 @@ func discoverProviders(out io.Writer) error {
 }
 
 func adoptCommand() *cobra.Command {
-	return &cobra.Command{
+	var noShare bool
+	command := &cobra.Command{
 		Use:     "adopt <claude|codex|gemini> <name>",
 		Short:   "Use an existing provider configuration as a profile",
 		Args:    cobra.ExactArgs(2),
@@ -74,9 +75,14 @@ func adoptCommand() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Adopted %s as %s/%s\n  directory: %s\n", p.ID, p.ID, item.Name, item.Home)
-			return nil
+			if noShare {
+				return nil
+			}
+			return shareNewProfile(cmd.OutOrStdout(), store, p, item.Name)
 		},
 	}
+	command.Flags().BoolVar(&noShare, "no-share", false, "keep this profile isolated even if setup enabled sharing")
+	return command
 }
 
 func shortcutCommand(use string, p provider.ID) *cobra.Command {

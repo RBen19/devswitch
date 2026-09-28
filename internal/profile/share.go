@@ -3,6 +3,7 @@ package profile
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,8 +147,8 @@ func unusedBackup(path string) (string, error) {
 	}
 }
 
-// ApplyShare rolls back completed replacements if any link fails. Newly created
-// empty source paths may remain; no original profile data is removed.
+// ApplyShare merges each replaced target into the source and keeps the original
+// as a backup. On failure, links are rolled back; copies already merged remain.
 func ApplyShare(links []ShareLink) (err error) {
 	var completed []ShareLink
 	defer func() {
@@ -196,6 +197,75 @@ func ApplyShare(links []ShareLink) (err error) {
 			return err
 		}
 		completed = append(completed, link)
+		if link.Backup != "" {
+			if err = mergeInto(link.Backup, link.Source); err != nil {
+				return fmt.Errorf("merge %s: %w", link.Target, err)
+			}
+		}
 	}
 	return nil
+}
+
+// mergeInto copies from into to without overwriting: directories merge
+// recursively, JSONL histories are appended, other clashes stay only in from.
+func mergeInto(from, to string) error {
+	info, err := os.Lstat(from)
+	if err != nil {
+		return err
+	}
+	existing, err := os.Lstat(to)
+	missing := errors.Is(err, os.ErrNotExist)
+	if err != nil && !missing {
+		return err
+	}
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		if !missing {
+			return nil
+		}
+		target, err := os.Readlink(from)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(target, to)
+	case info.IsDir():
+		if missing {
+			if err := os.Mkdir(to, info.Mode().Perm()); err != nil {
+				return err
+			}
+		} else if !existing.IsDir() {
+			return nil
+		}
+		entries, err := os.ReadDir(from)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := mergeInto(filepath.Join(from, entry.Name()), filepath.Join(to, entry.Name())); err != nil {
+				return err
+			}
+		}
+		return nil
+	case !info.Mode().IsRegular():
+		return nil
+	case missing:
+		return copyFile(from, to, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm())
+	case existing.Mode().IsRegular() && filepath.Ext(to) == ".jsonl":
+		return copyFile(from, to, os.O_APPEND|os.O_WRONLY, 0)
+	}
+	return nil
+}
+
+func copyFile(from, to string, flag int, perm os.FileMode) error {
+	in, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(to, flag, perm)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(out, in)
+	return errors.Join(err, out.Close())
 }
