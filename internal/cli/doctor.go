@@ -69,7 +69,7 @@ type healthCheck struct {
 }
 
 func doctorCommand() *cobra.Command {
-	var jsonOutput bool
+	var jsonOutput, fix bool
 	cmd := &cobra.Command{Use: "doctor", Short: "Check providers, profiles, and shell setup", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		var checks []healthCheck
 		detections, err := detectProviders()
@@ -121,6 +121,19 @@ func doctorCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
+		pending, err := pendingShares(settings)
+		if err != nil {
+			return err
+		}
+		if len(pending) > 0 && fix {
+			if err := refreshShares(cmd.OutOrStdout(), settings); err != nil {
+				return err
+			}
+			pending = nil
+		}
+		for _, link := range pending {
+			checks = append(checks, healthCheck{"unshared", false, link.Target + " (close agents, then run devswitch doctor --fix)"})
+		}
 		if len(settings.Shells) == 0 {
 			checks = append(checks, healthCheck{"shell", false, "Run devswitch install to enable PATH, aliases, and completion."})
 		}
@@ -161,5 +174,6 @@ func doctorCommand() *cobra.Command {
 		return nil
 	}}
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "print machine-readable checks")
+	cmd.Flags().BoolVar(&fix, "fix", false, "share paths missing from profiles shared during setup")
 	return cmd
 }

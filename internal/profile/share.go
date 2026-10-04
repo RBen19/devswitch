@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -182,6 +183,12 @@ func ApplyShare(links []ShareLink) (err error) {
 				return err
 			}
 		}
+		if link.Backup != "" && filepath.Ext(link.Target) == ".sqlite" {
+			// Fold the -wal file into the database, which would be orphaned by the rename.
+			if err = sqlite(link.Target, "PRAGMA wal_checkpoint(TRUNCATE);"); err != nil {
+				return err
+			}
+		}
 		if link.Backup != "" {
 			if _, statErr := os.Lstat(link.Backup); !errors.Is(statErr, os.ErrNotExist) {
 				return fmt.Errorf("backup path is no longer available: %s", link.Backup)
@@ -252,8 +259,23 @@ func mergeInto(from, to string) error {
 		return copyFile(from, to, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm())
 	case existing.Mode().IsRegular() && filepath.Ext(to) == ".jsonl":
 		return copyFile(from, to, os.O_APPEND|os.O_WRONLY, 0)
+	case existing.Mode().IsRegular() && filepath.Ext(to) == ".sqlite":
+		return sqlite(to, "ATTACH "+sqlQuote(from)+" AS other; INSERT OR IGNORE INTO threads SELECT * FROM other.threads;")
 	}
 	return nil
+}
+
+// sqlite uses the system sqlite3 CLI to avoid embedding a database driver.
+func sqlite(db, script string) error {
+	out, err := exec.Command("sqlite3", db, script).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("sqlite3 %s: %w: %s", db, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func sqlQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 func copyFile(from, to string, flag int, perm os.FileMode) error {
