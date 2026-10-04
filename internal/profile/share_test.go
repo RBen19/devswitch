@@ -2,7 +2,9 @@ package profile
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/RBen19/devswitch/internal/provider"
@@ -149,6 +151,36 @@ func TestSharingAdoptedHomeAndMultipleTargets(t *testing.T) {
 		if link != filepath.Join(resolvedHome, "agents") {
 			t.Fatalf("unexpected link: %s", link)
 		}
+	}
+}
+
+func TestSharingMergesCodexThreads(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 not installed")
+	}
+	s := &Store{Root: t.TempDir()}
+	p, _ := provider.Parse("codex")
+	source, _ := s.Add(p, "personal")
+	target, _ := s.Add(p, "work")
+	for home, ids := range map[string]string{source.Home: "('a'),('b')", target.Home: "('b'),('c')"} {
+		script := "PRAGMA journal_mode=WAL; CREATE TABLE threads (id TEXT PRIMARY KEY); INSERT INTO threads VALUES " + ids + ";"
+		if err := sqlite(filepath.Join(home, "state_5.sqlite"), script); err != nil {
+			t.Fatal(err)
+		}
+	}
+	links, err := s.PlanShare(p, "personal", []string{"work"}, []string{"sessions"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyShare(links); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("sqlite3", filepath.Join(target.Home, "state_5.sqlite"), "SELECT group_concat(id) FROM (SELECT id FROM threads ORDER BY id)").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "a,b,c" {
+		t.Fatalf("threads: got %q", got)
 	}
 }
 

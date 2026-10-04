@@ -23,6 +23,8 @@ func (p Provider) SharedPaths(groups []string) ([]SharedPath, error) {
 			SharedPath{"sessions", "sessions", true, true},
 			SharedPath{"archived_sessions", "sessions", true, true},
 			SharedPath{"session_index.jsonl", "sessions", false, true},
+			// Codex lists threads from this database, not from the session files.
+			SharedPath{"state_5.sqlite", "sessions", false, false},
 			SharedPath{"AGENTS.md", "agents", false, false},
 			SharedPath{"AGENTS.override.md", "agents", false, false},
 			SharedPath{"prompts", "commands", true, true})

@@ -32,6 +32,9 @@ func installCommand() *cobra.Command {
 				if err := refreshShells(cmd.Root(), settings); err != nil {
 					return err
 				}
+				if err := refreshShares(out, settings); err != nil {
+					return err
+				}
 				fmt.Fprintf(out, "devswitch is already set up for %s; shell integration refreshed.\n", sh.Name)
 				return nil
 			}

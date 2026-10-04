@@ -66,6 +66,52 @@ func shareAll(out io.Writer, store *profile.Store, p provider.Provider, source s
 	return nil
 }
 
+// refreshShares links paths added to the sharing list since setup, so updates
+// through the installer extend existing shares.
+func refreshShares(out io.Writer, settings shellSettings) error {
+	links, err := pendingShares(settings)
+	if err != nil || len(links) == 0 {
+		return err
+	}
+	if err := profile.ApplyShare(links); err != nil {
+		return fmt.Errorf("share profiles: %w", err)
+	}
+	for _, link := range links {
+		fmt.Fprintf(out, "Shared %s -> %s; previous data merged, original kept as backup.\n", link.Target, link.Source)
+	}
+	return nil
+}
+
+// pendingShares lists links missing between each sharing source chosen in setup and its other profiles.
+func pendingShares(settings shellSettings) ([]profile.ShareLink, error) {
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+	var pending []profile.ShareLink
+	for id, source := range settings.Share {
+		p, err := provider.Parse(id)
+		if err != nil {
+			return nil, err
+		}
+		var targets []string
+		for _, item := range store.Profiles {
+			if item.Provider == p.ID && item.Name != source {
+				targets = append(targets, item.Name)
+			}
+		}
+		if len(targets) == 0 {
+			continue
+		}
+		links, err := store.PlanShare(p, source, targets, nil)
+		if err != nil {
+			return nil, err
+		}
+		pending = append(pending, links...)
+	}
+	return pending, nil
+}
+
 // shareNewProfile links a new profile to the source chosen during setup.
 func shareNewProfile(out io.Writer, store *profile.Store, p provider.Provider, name string) error {
 	settings, err := loadSettings()
