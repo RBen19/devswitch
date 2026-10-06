@@ -99,7 +99,12 @@ func TestCodexThreadsSharedThroughSetupAndDoctor(t *testing.T) {
 	if data, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v %s", err, data)
 	}
-	env := append(os.Environ(), "HOME="+home, "SHELL=/bin/bash")
+	fakeBin := filepath.Join(temp, "bin")
+	if err := os.MkdirAll(fakeBin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFakeProvider(t, filepath.Join(fakeBin, "codex"))
+	env := append(os.Environ(), "HOME="+home, "SHELL=/bin/bash", "PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	personal := filepath.Join(home, ".codex")
 	work := filepath.Join(home, ".devswitch", "profiles", "codex", "work")
 	sql := func(db, script string) string {
