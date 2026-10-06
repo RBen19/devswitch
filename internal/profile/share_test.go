@@ -99,6 +99,43 @@ func TestSharingValidationAndSelection(t *testing.T) {
 	}
 }
 
+func TestSharingImportsTargetOnlyAgentFiles(t *testing.T) {
+	for _, id := range []string{"claude", "codex"} {
+		t.Run(id, func(t *testing.T) {
+			s := &Store{Root: t.TempDir()}
+			p, _ := provider.Parse(id)
+			source, _ := s.Add(p, "personal")
+			empty, _ := s.Add(p, "empty")
+			target, _ := s.Add(p, "work")
+			instructions := "CLAUDE.md"
+			if id == "codex" {
+				instructions = "AGENTS.md"
+			}
+			writeTestFile(t, filepath.Join(target.Home, instructions), "instructions")
+			writeTestFile(t, filepath.Join(target.Home, "agents", "backend.md"), "backend")
+			links, err := s.PlanShare(p, "personal", []string{"empty", "work"}, []string{"agents"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Lstat(filepath.Join(source.Home, instructions)); !os.IsNotExist(err) {
+				t.Fatal("planning changed source")
+			}
+			if err := ApplyShare(links); err != nil {
+				t.Fatal(err)
+			}
+			for _, home := range []string{source.Home, empty.Home, target.Home} {
+				assertTestFile(t, filepath.Join(home, instructions), "instructions")
+				assertTestFile(t, filepath.Join(home, "agents", "backend.md"), "backend")
+			}
+			assertTestFile(t, filepath.Join(target.Home, instructions+".devswitch-backup"), "instructions")
+			again, err := s.PlanShare(p, "personal", []string{"empty", "work"}, []string{"agents"})
+			if err != nil || len(again) != 0 {
+				t.Fatalf("repeat sharing: %v, %v", again, err)
+			}
+		})
+	}
+}
+
 func TestShareRollback(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "source")

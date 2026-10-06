@@ -210,7 +210,7 @@ By default, all five categories below are selected. Use `--only` with a comma-se
 | `rules` | `rules/` | `rules/` |
 | `commands` | `prompts/` | `commands/` |
 
-Missing directories and JSONL files are initialized in the source. Instruction files are linked only if they already exist; rerun `share` after adding them. Repeating the command leaves existing links alone.
+Missing directories and JSONL files are initialized in the source. Agent instruction files are shared if they exist in any selected profile; when absent from the source, the first target's copy seeds it. Rerun `share` after adding them. Repeating the command leaves existing links alone.
 
 Existing target paths are renamed to `<path>.devswitch-backup` (with a numeric suffix if needed). Their contents are first merged into the shared data: missing files and folders are copied, JSONL histories are appended, and on a name clash the source's file wins while the target's version stays in the backup. The backup keeps the complete original. The command prints every link and backup path. `--dry-run` makes no filesystem changes. If linking fails, completed replacements are rolled back.
 
