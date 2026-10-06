@@ -19,6 +19,7 @@ type Profile struct {
 	Provider provider.ID `json:"provider"`
 	Name     string      `json:"name"`
 	Home     string      `json:"home"`
+	NoShare  bool        `json:"no_share,omitempty"`
 }
 
 type Store struct {
@@ -82,16 +83,16 @@ func (s *Store) Save() error {
 	return nil
 }
 
-func (s *Store) Add(p provider.Provider, name string) (Profile, error) {
-	return s.create(p, name, "")
+func (s *Store) Add(p provider.Provider, name string, noShare bool) (Profile, error) {
+	return s.create(p, name, "", noShare)
 }
 
-func (s *Store) Adopt(p provider.Provider, name, home string) (Profile, error) {
+func (s *Store) Adopt(p provider.Provider, name, home string, noShare bool) (Profile, error) {
 	absolute, err := filepath.Abs(home)
 	if err != nil {
 		return Profile{}, err
 	}
-	return s.create(p, name, absolute)
+	return s.create(p, name, absolute, noShare)
 }
 
 func validateName(name string) error {
@@ -101,7 +102,7 @@ func validateName(name string) error {
 	return nil
 }
 
-func (s *Store) create(p provider.Provider, name, adoptedHome string) (Profile, error) {
+func (s *Store) create(p provider.Provider, name, adoptedHome string, noShare bool) (Profile, error) {
 	name = strings.TrimSpace(name)
 	if err := validateName(name); err != nil {
 		return Profile{}, err
@@ -147,7 +148,7 @@ func (s *Store) create(p provider.Provider, name, adoptedHome string) (Profile, 
 				}
 			}
 		}
-		item = Profile{Provider: p.ID, Name: name, Home: home}
+		item = Profile{Provider: p.ID, Name: name, Home: home, NoShare: noShare}
 		current.Profiles = append(current.Profiles, item)
 		sort.Slice(current.Profiles, func(i, j int) bool {
 			if current.Profiles[i].Provider == current.Profiles[j].Provider {

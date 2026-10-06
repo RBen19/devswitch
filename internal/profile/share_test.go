@@ -15,11 +15,11 @@ func TestSharingPreservesDataAndIsIdempotent(t *testing.T) {
 		t.Run(string(id), func(t *testing.T) {
 			s := &Store{Root: t.TempDir()}
 			p, _ := provider.Parse(string(id))
-			source, err := s.Add(p, "personal")
+			source, err := s.Add(p, "personal", false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			target, err := s.Add(p, "work")
+			target, err := s.Add(p, "work", false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -63,9 +63,9 @@ func TestSharingValidationAndSelection(t *testing.T) {
 	s := &Store{Root: t.TempDir()}
 	p, _ := provider.Parse("codex")
 	claude, _ := provider.Parse("claude")
-	source, _ := s.Add(p, "personal")
-	target, _ := s.Add(p, "work")
-	_, _ = s.Add(claude, "claude-only")
+	source, _ := s.Add(p, "personal", false)
+	target, _ := s.Add(p, "work", false)
+	_, _ = s.Add(claude, "claude-only", false)
 	for _, request := range []struct{ targets, groups []string }{
 		{[]string{"personal"}, nil},
 		{[]string{"work", "missing"}, nil},
@@ -104,9 +104,9 @@ func TestSharingImportsTargetOnlyAgentFiles(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			s := &Store{Root: t.TempDir()}
 			p, _ := provider.Parse(id)
-			source, _ := s.Add(p, "personal")
-			empty, _ := s.Add(p, "empty")
-			target, _ := s.Add(p, "work")
+			source, _ := s.Add(p, "personal", false)
+			empty, _ := s.Add(p, "empty", false)
+			target, _ := s.Add(p, "work", false)
 			instructions := "CLAUDE.md"
 			if id == "codex" {
 				instructions = "AGENTS.md"
@@ -161,12 +161,12 @@ func TestSharingAdoptedHomeAndMultipleTargets(t *testing.T) {
 	s := &Store{Root: t.TempDir()}
 	p, _ := provider.Parse("claude")
 	home := t.TempDir()
-	if _, err := s.Adopt(p, "personal", home); err != nil {
+	if _, err := s.Adopt(p, "personal", home, false); err != nil {
 		t.Fatal(err)
 	}
 	writeTestFile(t, filepath.Join(home, "CLAUDE.md"), "instructions")
 	for _, name := range []string{"work", "client"} {
-		if _, err := s.Add(p, name); err != nil {
+		if _, err := s.Add(p, name, false); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -197,8 +197,8 @@ func TestSharingMergesCodexThreads(t *testing.T) {
 	}
 	s := &Store{Root: t.TempDir()}
 	p, _ := provider.Parse("codex")
-	source, _ := s.Add(p, "personal")
-	target, _ := s.Add(p, "work")
+	source, _ := s.Add(p, "personal", false)
+	target, _ := s.Add(p, "work", false)
 	for home, ids := range map[string]string{source.Home: "('a'),('b')", target.Home: "('b'),('c')"} {
 		script := "PRAGMA journal_mode=WAL; CREATE TABLE threads (id TEXT PRIMARY KEY); INSERT INTO threads VALUES " + ids + ";"
 		if err := sqlite(filepath.Join(home, "state_5.sqlite"), script); err != nil {
@@ -228,6 +228,51 @@ func writeTestFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSharingExistingSymlinkPreservesAgents(t *testing.T) {
+	s := &Store{Root: t.TempDir()}
+	p, _ := provider.Parse("claude")
+	source, _ := s.Add(p, "personal", false)
+	target, _ := s.Add(p, "work", false)
+	external := t.TempDir()
+	writeTestFile(t, filepath.Join(external, "backend.md"), "backend")
+	writeTestFile(t, filepath.Join(source.Home, "agents", "frontend.md"), "frontend")
+	if err := os.Symlink("backend.md", filepath.Join(external, "alias.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(target.Home, "agents")); err != nil {
+		t.Fatal(err)
+	}
+	links, err := s.PlanShare(p, "personal", []string{"work"}, []string{"agents"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyShare(links); err != nil {
+		t.Fatal(err)
+	}
+	for _, home := range []string{source.Home, target.Home} {
+		assertTestFile(t, filepath.Join(home, "agents", "backend.md"), "backend")
+		assertTestFile(t, filepath.Join(home, "agents", "alias.md"), "backend")
+		assertTestFile(t, filepath.Join(home, "agents", "frontend.md"), "frontend")
+	}
+	assertTestFile(t, filepath.Join(target.Home, "agents.devswitch-backup", "backend.md"), "backend")
+	if _, err := os.Stat(filepath.Join(external, "frontend.md")); !os.IsNotExist(err) {
+		t.Fatal("modified the external agents directory")
+	}
+}
+
+func TestSharingRejectsOverlappingSymlink(t *testing.T) {
+	s := &Store{Root: t.TempDir()}
+	p, _ := provider.Parse("claude")
+	source, _ := s.Add(p, "personal", false)
+	target, _ := s.Add(p, "work", false)
+	if err := os.Symlink(source.Home, filepath.Join(target.Home, "agents")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PlanShare(p, "personal", []string{"work"}, []string{"agents"}); err == nil {
+		t.Fatal("accepted a symlink containing the merge destination")
 	}
 }
 

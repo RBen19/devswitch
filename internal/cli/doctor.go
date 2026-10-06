@@ -71,6 +71,22 @@ type healthCheck struct {
 func doctorCommand() *cobra.Command {
 	var jsonOutput, fix bool
 	cmd := &cobra.Command{Use: "doctor", Short: "Check providers, profiles, and shell setup", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		settings, err := loadSettings()
+		if err != nil {
+			return err
+		}
+		if fix {
+			out := cmd.OutOrStdout()
+			if jsonOutput {
+				out = cmd.ErrOrStderr()
+			}
+			if err := refreshShares(out, settings); err != nil {
+				return err
+			}
+			if err := refreshShells(cmd.Root(), settings); err != nil {
+				return err
+			}
+		}
 		var checks []healthCheck
 		detections, err := detectProviders()
 		if err != nil {
@@ -109,24 +125,12 @@ func doctorCommand() *cobra.Command {
 				return err
 			}
 			for _, entry := range entries {
-				if entry.Type()&os.ModeSymlink != 0 {
+				if entry.Type()&os.ModeSymlink != 0 && !strings.Contains(entry.Name(), ".devswitch-backup") {
 					path := filepath.Join(p.Home, entry.Name())
 					if _, err := os.Stat(path); err != nil {
 						checks = append(checks, healthCheck{"shared link", false, path + ": " + err.Error()})
 					}
 				}
-			}
-		}
-		settings, err := loadSettings()
-		if err != nil {
-			return err
-		}
-		if fix {
-			if err := refreshShares(cmd.OutOrStdout(), settings); err != nil {
-				return err
-			}
-			if err := refreshShells(cmd.Root(), settings); err != nil {
-				return err
 			}
 		}
 		fixable := false
