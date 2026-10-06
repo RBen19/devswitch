@@ -110,7 +110,7 @@ func pendingShares(settings shellSettings) ([]shareStatus, error) {
 		}
 		var targets []string
 		for _, item := range store.Profiles {
-			if item.Provider == p.ID && item.Name != source {
+			if item.Provider == p.ID && item.Name != source && !item.NoShare {
 				targets = append(targets, item.Name)
 			}
 		}

@@ -56,7 +56,7 @@ func TestSetupSharingMergesExistingAndNewProfiles(t *testing.T) {
 
 	setup := exec.Command(binary, "install", "--shell", "bash")
 	setup.Env = env
-	setup.Stdin = strings.NewReader("y\ny\ny\nn\nn\nn\n")
+	setup.Stdin = strings.NewReader("y\n\n")
 	if data, err := setup.CombinedOutput(); err != nil {
 		t.Fatalf("setup: %v %s", err, data)
 	}
@@ -84,6 +84,9 @@ func TestSetupSharingMergesExistingAndNewProfiles(t *testing.T) {
 	}
 	if again := assertCLI(t, binary, env, "install", "--shell", "bash"); !strings.Contains(again, "already set up") {
 		t.Fatalf("setup ran twice: %s", again)
+	}
+	if _, err := os.Lstat(filepath.Join(home, ".devswitch", "profiles", "claude", "solo", "projects")); !os.IsNotExist(err) {
+		t.Fatal("refresh shared the --no-share profile")
 	}
 }
 
@@ -130,8 +133,7 @@ func TestCodexThreadsSharedThroughSetupAndDoctor(t *testing.T) {
 
 	setup := exec.Command(binary, "install", "--shell", "bash")
 	setup.Env = env
-	// PATH, adopt ~/.codex, share codex, then decline the dvsw and profile aliases.
-	setup.Stdin = strings.NewReader("y\ny\ny\nn\nn\nn\n")
+	setup.Stdin = strings.NewReader("y\n\n")
 	if data, err := setup.CombinedOutput(); err != nil {
 		t.Fatalf("setup: %v %s", err, data)
 	}

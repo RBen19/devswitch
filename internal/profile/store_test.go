@@ -14,7 +14,7 @@ func TestStoreAddAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := store.Add(provider.Provider{ID: provider.Claude}, "perso")
+	created, err := store.Add(provider.Provider{ID: provider.Claude}, "perso", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestConcurrentProfileCreation(t *testing.T) {
 		go func(i int) {
 			store, err := Load(root)
 			if err == nil {
-				_, err = store.Add(provider.Provider{ID: provider.Codex}, fmt.Sprintf("profile-%d", i))
+				_, err = store.Add(provider.Provider{ID: provider.Codex}, fmt.Sprintf("profile-%d", i), false)
 			}
 			errors <- err
 		}(i)
@@ -59,7 +59,7 @@ func TestConcurrentProfileCreation(t *testing.T) {
 func TestProfileNamesCannotEscapeStorage(t *testing.T) {
 	store := &Store{Root: t.TempDir()}
 	for _, name := range []string{".", "..", "../outside", "-flag", "a\nb", "a\x00b"} {
-		if _, err := store.Add(provider.Provider{ID: provider.Codex}, name); err == nil {
+		if _, err := store.Add(provider.Provider{ID: provider.Codex}, name, false); err == nil {
 			t.Fatalf("accepted name %q", name)
 		}
 	}

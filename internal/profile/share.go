@@ -97,6 +97,9 @@ func (s *Store) PlanShare(p provider.Provider, sourceName string, targetNames, g
 			if resolveErr == nil && resolved == src {
 				continue
 			}
+			if resolveErr == nil && resolved != dst && (overlaps(resolved, src) || overlaps(resolved, dst)) {
+				return nil, fmt.Errorf("sharing would merge overlapping paths: %s and %s", resolved, src)
+			}
 			if overlaps(src, dst) {
 				return nil, fmt.Errorf("sharing would create overlapping paths: %s and %s", src, dst)
 			}
@@ -229,7 +232,14 @@ func ApplyShare(links []ShareLink) (err error) {
 		}
 		completed = append(completed, link)
 		if link.Backup != "" {
-			if err = mergeInto(link.Backup, link.Source); err != nil {
+			from, resolveErr := filepath.EvalSymlinks(link.Backup)
+			if errors.Is(resolveErr, os.ErrNotExist) {
+				continue
+			}
+			if resolveErr != nil {
+				return resolveErr
+			}
+			if err = mergeInto(from, link.Source); err != nil {
 				return fmt.Errorf("merge %s: %w", link.Target, err)
 			}
 		}
@@ -257,6 +267,9 @@ func mergeInto(from, to string) error {
 		target, err := os.Readlink(from)
 		if err != nil {
 			return err
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(from), target)
 		}
 		return os.Symlink(target, to)
 	case info.IsDir():
