@@ -121,18 +121,30 @@ func doctorCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		pending, err := pendingShares(settings)
-		if err != nil {
-			return err
-		}
-		if len(pending) > 0 && fix {
+		if fix {
 			if err := refreshShares(cmd.OutOrStdout(), settings); err != nil {
 				return err
 			}
-			pending = nil
+			if err := refreshShells(cmd.Root(), settings); err != nil {
+				return err
+			}
 		}
-		for _, link := range pending {
-			checks = append(checks, healthCheck{"unshared", false, link.Target + " (close agents, then run devswitch doctor --fix)"})
+		fixable := false
+		shares, err := pendingShares(settings)
+		if err != nil {
+			return err
+		}
+		for _, share := range shares {
+			name := share.Provider + " sharing"
+			if len(share.Targets) == 0 {
+				checks = append(checks, healthCheck{name, true, share.Source + " (no other profiles)"})
+				continue
+			}
+			checks = append(checks, healthCheck{name, len(share.Links) == 0, share.Source + " -> " + strings.Join(share.Targets, ", ")})
+			for _, link := range share.Links {
+				checks = append(checks, healthCheck{"unshared", false, link.Target})
+				fixable = true
+			}
 		}
 		if len(settings.Shells) == 0 {
 			checks = append(checks, healthCheck{"shell", false, "Run devswitch install to enable PATH, aliases, and completion."})
@@ -147,7 +159,9 @@ func doctorCommand() *cobra.Command {
 			}
 			completion := filepath.Join(stateRoot, "shell", "completion."+sh.Name)
 			info, err := os.Stat(completion)
-			checks = append(checks, healthCheck{sh.Name + " completion", err == nil && info.Mode().IsRegular() && info.Size() > 0, completion})
+			completionOK := err == nil && info.Mode().IsRegular() && info.Size() > 0
+			checks = append(checks, healthCheck{sh.Name + " completion", completionOK, completion})
+			fixable = fixable || !ok || !completionOK
 		}
 		allOK := true
 		for _, c := range checks {
@@ -168,8 +182,11 @@ func doctorCommand() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "%-3s %-20s %s\n", status, c.Name, c.Detail)
 			}
 		}
+		if fixable {
+			return fmt.Errorf("health checks found issues; close running agents, then run: devswitch doctor --fix")
+		}
 		if !allOK {
-			return fmt.Errorf("health checks found issues; see the suggested fixes above")
+			return fmt.Errorf("health checks found issues that need manual action; see above")
 		}
 		return nil
 	}}

@@ -19,7 +19,7 @@ jobs:
           cache: true
       - name: Install shells (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y zsh fish
+        run: sudo apt-get update && sudo apt-get install -y zsh fish sqlite3
       - name: Install shells (macOS)
         if: runner.os == 'macOS'
         run: brew install fish
