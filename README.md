@@ -97,7 +97,8 @@ dvsw cx w       # w means work; p means personal
 
 ```bash
 devswitch discover       # binaries, existing homes, and registered profiles
-devswitch doctor         # profile directories, broken links, shell integration, completion
+devswitch doctor         # profile directories, broken links, sharing, shell integration, completion
+devswitch doctor --fix   # link missing shared paths and rewrite shell integration (close agents first)
 devswitch discover --json
 devswitch list --json
 devswitch doctor --json

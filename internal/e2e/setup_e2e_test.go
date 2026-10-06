@@ -87,6 +87,78 @@ func TestSetupSharingMergesExistingAndNewProfiles(t *testing.T) {
 	}
 }
 
+func TestCodexThreadsSharedThroughSetupAndDoctor(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 not installed")
+	}
+	temp := t.TempDir()
+	home := filepath.Join(temp, "home")
+	binary := filepath.Join(temp, "devswitch")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/devswitch")
+	build.Dir = projectRoot(t)
+	if data, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v %s", err, data)
+	}
+	env := append(os.Environ(), "HOME="+home, "SHELL=/bin/bash")
+	personal := filepath.Join(home, ".codex")
+	work := filepath.Join(home, ".devswitch", "profiles", "codex", "work")
+	sql := func(db, script string) string {
+		t.Helper()
+		data, err := exec.Command("sqlite3", db, script).CombinedOutput()
+		if err != nil {
+			t.Fatalf("sqlite3 %s: %v %s", db, err, data)
+		}
+		return strings.TrimSpace(string(data))
+	}
+	threads := func(home string) string {
+		return sql(filepath.Join(home, "state_5.sqlite"), "SELECT group_concat(id) FROM (SELECT id FROM threads ORDER BY id)")
+	}
+	createDB := func(home, ids string) {
+		sql(filepath.Join(home, "state_5.sqlite"), "PRAGMA journal_mode=WAL; CREATE TABLE threads (id TEXT PRIMARY KEY); INSERT INTO threads VALUES "+ids+";")
+	}
+	if err := os.MkdirAll(personal, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	createDB(personal, "('a'),('b')")
+	assertCLI(t, binary, env, "add", "codex", "work")
+	createDB(work, "('b'),('c')")
+
+	setup := exec.Command(binary, "install", "--shell", "bash")
+	setup.Env = env
+	// PATH, adopt ~/.codex, share codex, then decline the dvsw and profile aliases.
+	setup.Stdin = strings.NewReader("y\ny\ny\nn\nn\nn\n")
+	if data, err := setup.CombinedOutput(); err != nil {
+		t.Fatalf("setup: %v %s", err, data)
+	}
+	if got := threads(work); got != "a,b,c" {
+		t.Fatalf("work threads after setup: %q", got)
+	}
+	sql(filepath.Join(work, "state_5.sqlite"), "INSERT INTO threads VALUES ('from-work')")
+	if got := threads(personal); got != "a,b,c,from-work" {
+		t.Fatalf("thread created in work is not visible in personal: %q", got)
+	}
+	if doctor := assertCLI(t, binary, env, "doctor"); !strings.Contains(doctor, "OK  codex sharing        personal -> work") {
+		t.Fatalf("doctor does not report sharing: %s", doctor)
+	}
+
+	// A share made before the database was shareable leaves work with its own copy.
+	if err := os.Remove(filepath.Join(work, "state_5.sqlite")); err != nil {
+		t.Fatal(err)
+	}
+	createDB(work, "('d')")
+	doctor := exec.Command(binary, "doctor")
+	doctor.Env = env
+	data, err := doctor.CombinedOutput()
+	if err == nil || !strings.Contains(string(data), "unshared") || !strings.Contains(string(data), "devswitch doctor --fix") {
+		t.Fatalf("doctor missed the unshared database: %v %s", err, data)
+	}
+	assertCLI(t, binary, env, "doctor", "--fix")
+	if got := threads(personal); got != "a,b,c,d,from-work" {
+		t.Fatalf("doctor --fix did not merge threads: %q", got)
+	}
+	assertCLI(t, binary, env, "doctor")
+}
+
 func TestOnboardingShellsAliasesAndCompletion(t *testing.T) {
 	temp := filepath.Join(t.TempDir(), "space ' $(touch SHOULD_NOT_EXIST)")
 	if err := os.MkdirAll(temp, 0o700); err != nil {
