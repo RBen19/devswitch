@@ -17,6 +17,7 @@ Each account keeps its own login and its own conversations.
    ```
 
    It asks a few yes/no questions. Pressing Enter accepts the safe default.
+   When it finishes, close this window and open a new Terminal window.
 2. **Add an account** — give it any name you like:
 
    ```bash
@@ -24,7 +25,7 @@ Each account keeps its own login and its own conversations.
    devswitch login claude work
    ```
 
-   The official Claude, Codex or Gemini login opens. devswitch never sees your password.
+   The official login starts. For Claude, type `/login` in the window that opens. devswitch never sees your password.
 3. **Use it** — open that account whenever you need it:
 
    ```bash
@@ -54,7 +55,7 @@ Already logged in before installing devswitch? Setup offers to keep that login a
 
 **It says there is "no account named …".** Check the spelling; the message lists the accounts you have. `devswitch list` shows them all.
 
-**Can I undo everything?** Yes: `devswitch uninstall` removes the shell setup; add `--purge` to also delete the accounts devswitch created.
+**Can I undo everything?** Mostly. `devswitch uninstall` removes the shell setup; add `--purge` to also delete the accounts devswitch created. Logins you had before devswitch stay where they were. Finally, delete the `devswitch` file whose location the command prints.
 
 **Does it work on Windows?** Not yet. macOS and Linux are supported today.
 
