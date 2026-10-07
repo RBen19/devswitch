@@ -21,7 +21,7 @@ func TestProfileLifecycleWithCompiledBinary(t *testing.T) {
 	if err := os.MkdirAll(providerBin, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, binary := range []string{"claude", "codex"} {
+	for _, binary := range []string{"claude", "codex", "agy"} {
 		writeFakeProvider(t, filepath.Join(providerBin, binary))
 	}
 
@@ -40,6 +40,20 @@ func TestProfileLifecycleWithCompiledBinary(t *testing.T) {
 
 	assertCLI(t, devswitch, env, "add", "claude", "personal")
 	assertCLI(t, devswitch, env, "add", "codex", "work")
+	if err := os.Mkdir(filepath.Join(home, ".gemini"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	assertCLI(t, devswitch, env, "adopt", "gemini", "personal")
+	assertCLI(t, devswitch, env, "add", "gemini", "work")
+	for name, expected := range map[string]string{
+		"personal": home,
+		"work":     filepath.Join(home, ".devswitch", "profiles", "gemini", "work"),
+	} {
+		assertCLI(t, devswitch, env, "run", "gemini", name)
+		if !strings.Contains(readProviderOutput(t, outputFile), "HOME="+expected+"\n") {
+			t.Fatalf("wrong HOME for Gemini %s", name)
+		}
+	}
 
 	assertCLI(t, devswitch, env, "login", "claude", "personal")
 	claudeOutput := readProviderOutput(t, outputFile)
@@ -108,6 +122,7 @@ func writeFakeProvider(t *testing.T, path string) {
 	script := `#!/bin/sh
 printf 'CLAUDE_CONFIG_DIR=%s\n' "$CLAUDE_CONFIG_DIR" > "$DEVSWITCH_E2E_OUTPUT"
 printf 'CODEX_HOME=%s\n' "$CODEX_HOME" >> "$DEVSWITCH_E2E_OUTPUT"
+printf 'HOME=%s\n' "$HOME" >> "$DEVSWITCH_E2E_OUTPUT"
 printf 'ARGS=%s\n' "$*" >> "$DEVSWITCH_E2E_OUTPUT"
 `
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {

@@ -70,7 +70,7 @@ func adoptCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			item, err := store.Adopt(p, args[1], home)
+			item, err := store.Adopt(p, args[1], home, noShare)
 			if err != nil {
 				return err
 			}

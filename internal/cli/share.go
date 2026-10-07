@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/RBen19/devswitch/internal/profile"
@@ -69,47 +71,58 @@ func shareAll(out io.Writer, store *profile.Store, p provider.Provider, source s
 // refreshShares links paths added to the sharing list since setup, so updates
 // through the installer extend existing shares.
 func refreshShares(out io.Writer, settings shellSettings) error {
-	links, err := pendingShares(settings)
-	if err != nil || len(links) == 0 {
+	shares, err := pendingShares(settings)
+	if err != nil {
 		return err
 	}
-	if err := profile.ApplyShare(links); err != nil {
-		return fmt.Errorf("share profiles: %w", err)
-	}
-	for _, link := range links {
-		fmt.Fprintf(out, "Shared %s -> %s; previous data merged, original kept as backup.\n", link.Target, link.Source)
+	for _, share := range shares {
+		if len(share.Links) == 0 {
+			continue
+		}
+		if err := profile.ApplyShare(share.Links); err != nil {
+			return fmt.Errorf("share profiles: %w", err)
+		}
+		for _, link := range share.Links {
+			fmt.Fprintf(out, "Shared %s -> %s; previous data merged, original kept as backup.\n", link.Target, link.Source)
+		}
 	}
 	return nil
 }
 
-// pendingShares lists links missing between each sharing source chosen in setup and its other profiles.
-func pendingShares(settings shellSettings) ([]profile.ShareLink, error) {
+type shareStatus struct {
+	Provider, Source string
+	Targets          []string
+	Links            []profile.ShareLink
+}
+
+// pendingShares lists, per sharing source chosen in setup, the links its other profiles still miss.
+func pendingShares(settings shellSettings) ([]shareStatus, error) {
 	store, err := getStore()
 	if err != nil {
 		return nil, err
 	}
-	var pending []profile.ShareLink
-	for id, source := range settings.Share {
+	var shares []shareStatus
+	for _, id := range slices.Sorted(maps.Keys(settings.Share)) {
+		source := settings.Share[id]
 		p, err := provider.Parse(id)
 		if err != nil {
 			return nil, err
 		}
 		var targets []string
 		for _, item := range store.Profiles {
-			if item.Provider == p.ID && item.Name != source {
+			if item.Provider == p.ID && item.Name != source && !item.NoShare {
 				targets = append(targets, item.Name)
 			}
 		}
-		if len(targets) == 0 {
-			continue
+		share := shareStatus{Provider: id, Source: source, Targets: targets}
+		if len(targets) > 0 {
+			if share.Links, err = store.PlanShare(p, source, targets, nil); err != nil {
+				return nil, err
+			}
 		}
-		links, err := store.PlanShare(p, source, targets, nil)
-		if err != nil {
-			return nil, err
-		}
-		pending = append(pending, links...)
+		shares = append(shares, share)
 	}
-	return pending, nil
+	return shares, nil
 }
 
 // shareNewProfile links a new profile to the source chosen during setup.

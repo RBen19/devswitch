@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"github.com/RBen19/devswitch/internal/provider"
 	"os"
 	"path/filepath"
@@ -94,10 +95,10 @@ func TestCompletionUsesProviderProfiles(t *testing.T) {
 	}
 	codex, _ := provider.Parse("codex")
 	claude, _ := provider.Parse("claude")
-	if _, err := store.Add(codex, "work"); err != nil {
+	if _, err := store.Add(codex, "work", false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Add(claude, "private"); err != nil {
+	if _, err := store.Add(claude, "private", false); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"__complete", "run", "codex", ""}, {"__complete", "alias", "add", "my-ai", "codex", ""}, {"__complete", "cx", ""}} {
@@ -113,4 +114,107 @@ func TestCompletionUsesProviderProfiles(t *testing.T) {
 			t.Fatalf("wrong candidates for %v: %s", args, out.String())
 		}
 	}
+}
+
+func TestSetupUsesOnlyChosenShortcut(t *testing.T) {
+	for _, input := range []string{"my-switch\n", "\n", "noninteractive"} {
+		t.Run(strings.TrimSpace(input), func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			if err := os.Mkdir(filepath.Join(home, ".claude"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"install", "--shell", "bash"}
+			if input == "noninteractive" {
+				args = append(args, "--yes")
+			}
+			out, _ := runTestCLI(t, input, args...)
+			settings, err := loadSettings()
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := 0
+			if input == "my-switch\n" {
+				want = 1
+				if !hasAlias(settings.Aliases, "my-switch") {
+					t.Fatal("chosen shortcut was not saved")
+				}
+			}
+			if len(settings.Aliases) != want {
+				t.Fatalf("unexpected aliases: %+v", settings.Aliases)
+			}
+			if strings.Contains(out, "[y/N]") || strings.Contains(out, "[Y/n]") {
+				t.Fatalf("single-account setup asked extra questions: %s", out)
+			}
+			out, _ = runTestCLI(t, "", args...)
+			if strings.Contains(out, "Optional shortcut") {
+				t.Fatal("update prompted again")
+			}
+		})
+	}
+}
+
+func TestDoctorRepairsBeforeJSONAndPreservesIsolation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	bin := filepath.Join(home, "bin")
+	if err := os.Mkdir(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	runTestCLI(t, "", "add", "claude", "personal")
+	runTestCLI(t, "", "add", "claude", "work")
+	runTestCLI(t, "", "add", "claude", "solo", "--no-share")
+	if err := os.Mkdir(filepath.Join(home, ".claude"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runTestCLI(t, "", "adopt", "claude", "adopted", "--no-share")
+	runTestCLI(t, "", "install", "--yes", "--shell", "bash")
+	settings, _ := loadSettings()
+	settings.Share = map[string]string{"claude": "personal"}
+	if err := saveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	work := filepath.Join(home, ".devswitch", "profiles", "claude", "work")
+	if err := os.Symlink(filepath.Join(home, "missing"), filepath.Join(work, "agents")); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		out, stderr := runTestCLI(t, "", "doctor", "--fix", "--json")
+		var checks []healthCheck
+		if err := json.Unmarshal([]byte(out), &checks); err != nil {
+			t.Fatalf("invalid JSON: %v: %s", err, out)
+		}
+		for _, check := range checks {
+			if !check.OK {
+				t.Fatalf("stale failure: %+v", check)
+			}
+		}
+		if i == 0 && !strings.Contains(stderr, "Shared ") {
+			t.Fatal("repair messages missing from stderr")
+		}
+	}
+	runTestCLI(t, "", "install", "--yes", "--shell", "bash")
+	for _, dir := range []string{filepath.Join(home, ".claude"), filepath.Join(home, ".devswitch", "profiles", "claude", "solo")} {
+		if _, err := os.Lstat(filepath.Join(dir, "agents")); !os.IsNotExist(err) {
+			t.Fatalf("isolated profile was shared: %s", dir)
+		}
+	}
+}
+
+func runTestCLI(t *testing.T, input string, args ...string) (string, string) {
+	t.Helper()
+	cmd := NewRootCommand()
+	var out, stderr bytes.Buffer
+	cmd.SetIn(strings.NewReader(input))
+	cmd.SetOut(&out)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("%v: %v\n%s\n%s", args, err, &out, &stderr)
+	}
+	return out.String(), stderr.String()
 }

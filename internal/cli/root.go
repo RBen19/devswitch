@@ -89,7 +89,7 @@ func addCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			created, err := store.Add(p, args[1])
+			created, err := store.Add(p, args[1], noShare)
 			if err != nil {
 				return err
 			}
@@ -192,6 +192,8 @@ func launch(ctx context.Context, out io.Writer, providerName, name string, login
 	defaultHome, defaultHomeErr := p.DefaultHome()
 	if defaultHomeErr != nil || !sameHome(item.Home, defaultHome) {
 		command.Env = append(command.Env, p.HomeEnvVar+"="+item.Home)
+	} else if p.HomeEnvVar == "HOME" {
+		command.Env = append(command.Env, "HOME="+os.Getenv("HOME"))
 	}
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
