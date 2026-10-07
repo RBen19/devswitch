@@ -123,11 +123,11 @@ Setup performs the following steps:
 
 1. Detect your shell and install PATH integration plus tab completion.
 2. Detect Claude Code, Codex, and Gemini CLI binaries and existing default configuration directories.
-3. Offer to adopt existing configurations as `personal`, preserving the login. Already-adopted homes are skipped; name conflicts receive an actionable message.
-4. Ask, per provider (default No), whether to share sessions, memory, skills and agents of `personal` with every other profile, now and for future ones. Existing profiles are merged in (see [Share](#share-data-between-profiles-of-the-same-provider)).
-5. Offer the `dvsw` shortcut and optional named profile shortcuts such as `cx-personal`.
+3. Register existing configurations as `personal`, preserving the login. Already-adopted homes are skipped; name conflicts receive an actionable message.
+4. Only when a provider has multiple eligible profiles, ask whether to share sessions, memory, skills and agents (default No). Profiles created with `--no-share` stay excluded. See [Share](#share-data-between-profiles-of-the-same-provider).
+5. Let you enter your own shortcut name for `devswitch`. Press Enter to skip; no alias is imposed. Add custom profile shortcuts later with `devswitch alias add <name> <provider> <profile>`.
 
-`--yes` enables completion, adopts detected configurations when `personal` is available, and adds `dvsw`; it never enables sharing. Additional per-profile aliases are offered only during interactive setup, or can be added anytime. Setup runs once per shell: running it again, including through the curl installer on update, only refreshes the shell integration.
+`--yes` enables completion and adopts detected configurations when `personal` is available, without prompts or new aliases; it never enables sharing. Existing aliases are preserved. Setup runs once per shell: running it again, including through the curl installer on update, refreshes shell integration and existing shares without asking again.
 
 Open a new terminal after setup, or run the `source` command it prints. Bash setup handles both interactive and login shells. Zsh honors `ZDOTDIR`; Fish honors `XDG_CONFIG_HOME`. Setup updates delimited blocks, preserves other shell content and symlinked dotfiles, and upgrades the previous devswitch PATH block. Existing shell commands and aliases take precedence over generated aliases.
 
@@ -156,7 +156,8 @@ dvsw cx w       # w means work; p means personal
 
 ```bash
 devswitch discover       # binaries, existing homes, and registered profiles
-devswitch doctor         # profile directories, broken links, shell integration, completion
+devswitch doctor         # profile directories, broken links, sharing, shell integration, completion
+devswitch doctor --fix   # link missing shared paths and rewrite shell integration (close agents first)
 devswitch discover --json
 devswitch list --json
 devswitch doctor --json
@@ -256,7 +257,7 @@ devswitch share claude personal work client-a
 devswitch share claude personal work --only skills,agents
 ```
 
-Targets receive symlinks pointing to the source profile's data. Changes through either profile are shared. Codex links only to Codex; Claude links only to Claude. Adopted profiles also work as sources or targets. New profiles remain isolated until you run `share` for them, unless sharing was enabled during setup; then `add` and `adopt` link them automatically, and `--no-share` keeps one isolated.
+Targets receive symlinks pointing to the source profile's data. Changes through either profile are shared. Codex links only to Codex; Claude links only to Claude. Adopted profiles also work as sources or targets. New profiles remain isolated until you run `share` for them, unless sharing was enabled during setup; then `add` and `adopt` link them automatically. `--no-share` persists an exclusion from automatic sharing, including updates and `doctor --fix`; explicit `share` commands still work.
 
 By default, all five categories below are selected. Use `--only` with a comma-separated list to narrow them:
 
@@ -268,7 +269,7 @@ By default, all five categories below are selected. Use `--only` with a comma-se
 | `rules` | `rules/` | `rules/` |
 | `commands` | `prompts/` | `commands/` |
 
-Missing directories and JSONL files are initialized in the source. Instruction files are linked only if they already exist; rerun `share` after adding them. Repeating the command leaves existing links alone.
+Missing directories and JSONL files are initialized in the source. Agent instruction files are shared if they exist in any selected profile; when absent from the source, the first target's copy seeds it. Rerun `share` after adding them. Repeating the command leaves existing links alone.
 
 Existing target paths are renamed to `<path>.devswitch-backup` (with a numeric suffix if needed). Their contents are first merged into the shared data: missing files and folders are copied, JSONL histories are appended, and on a name clash the source's file wins while the target's version stays in the backup. The backup keeps the complete original. The command prints every link and backup path. `--dry-run` makes no filesystem changes. If linking fails, completed replacements are rolled back.
 

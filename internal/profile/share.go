@@ -61,7 +61,19 @@ func (s *Store) PlanShare(p provider.Provider, sourceName string, targetNames, g
 		info, err := os.Lstat(src)
 		if errors.Is(err, os.ErrNotExist) {
 			if !entry.Create {
-				continue
+				if entry.Group != "agents" {
+					continue
+				}
+				found := false
+				for _, home := range homes {
+					if target, err := os.Stat(filepath.Join(home, entry.Name)); err == nil && target.Mode().IsRegular() {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
 			}
 		} else if err != nil {
 			return nil, err
@@ -84,6 +96,9 @@ func (s *Store) PlanShare(p provider.Provider, sourceName string, targetNames, g
 			resolved, resolveErr := filepath.EvalSymlinks(dst)
 			if resolveErr == nil && resolved == src {
 				continue
+			}
+			if resolveErr == nil && resolved != dst && (overlaps(resolved, src) || overlaps(resolved, dst)) {
+				return nil, fmt.Errorf("sharing would merge overlapping paths: %s and %s", resolved, src)
 			}
 			if overlaps(src, dst) {
 				return nil, fmt.Errorf("sharing would create overlapping paths: %s and %s", src, dst)
@@ -151,6 +166,18 @@ func unusedBackup(path string) (string, error) {
 // ApplyShare merges each replaced target into the source and keeps the original
 // as a backup. On failure, links are rolled back; copies already merged remain.
 func ApplyShare(links []ShareLink) (err error) {
+	for _, link := range links {
+		if link.Directory || filepath.Ext(link.Source) != ".md" {
+			continue
+		}
+		if _, statErr := os.Lstat(link.Source); errors.Is(statErr, os.ErrNotExist) {
+			if target, statErr := os.Stat(link.Target); statErr == nil && target.Mode().IsRegular() {
+				if err := copyFile(link.Target, link.Source, os.O_CREATE|os.O_EXCL|os.O_WRONLY, target.Mode().Perm()); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	var completed []ShareLink
 	defer func() {
 		if err == nil {
@@ -205,7 +232,14 @@ func ApplyShare(links []ShareLink) (err error) {
 		}
 		completed = append(completed, link)
 		if link.Backup != "" {
-			if err = mergeInto(link.Backup, link.Source); err != nil {
+			from, resolveErr := filepath.EvalSymlinks(link.Backup)
+			if errors.Is(resolveErr, os.ErrNotExist) {
+				continue
+			}
+			if resolveErr != nil {
+				return resolveErr
+			}
+			if err = mergeInto(from, link.Source); err != nil {
 				return fmt.Errorf("merge %s: %w", link.Target, err)
 			}
 		}
@@ -233,6 +267,9 @@ func mergeInto(from, to string) error {
 		target, err := os.Readlink(from)
 		if err != nil {
 			return err
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(from), target)
 		}
 		return os.Symlink(target, to)
 	case info.IsDir():

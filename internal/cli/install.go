@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/RBen19/devswitch/internal/provider"
 	"github.com/spf13/cobra"
@@ -39,10 +40,6 @@ func installCommand() *cobra.Command {
 				return nil
 			}
 			fmt.Fprintf(out, "Shell: %s\nConfiguration: %s\n", sh.Name, sh.Config)
-			if !yes && !confirm(reader, out, "Install PATH and tab completion?", true) {
-				fmt.Fprintln(out, "Setup cancelled.")
-				return nil
-			}
 			store, err := getStore()
 			if err != nil {
 				return err
@@ -75,12 +72,10 @@ func installCommand() *cobra.Command {
 					fmt.Fprintf(out, "%s: found %s; use 'devswitch adopt %s <name>' to choose an unused name\n", id, home, id)
 					continue
 				}
-				if yes || confirm(reader, out, fmt.Sprintf("Use existing %s configuration as %s/personal?", home, id), true) {
-					if _, err := store.Adopt(p, "personal", home); err != nil {
-						return err
-					}
-					fmt.Fprintf(out, "Adopted %s/personal (existing login preserved).\n", id)
+				if _, err := store.Adopt(p, "personal", home, false); err != nil {
+					return err
 				}
+				fmt.Fprintf(out, "Adopted %s/personal (existing login preserved).\n", id)
 			}
 			for _, id := range []provider.ID{provider.Claude, provider.Codex} {
 				if yes || settings.Share[string(id)] != "" {
@@ -88,11 +83,11 @@ func installCommand() *cobra.Command {
 				}
 				var names []string
 				for _, item := range store.Profiles {
-					if item.Provider == id {
+					if item.Provider == id && !item.NoShare {
 						names = append(names, item.Name)
 					}
 				}
-				if len(names) == 0 {
+				if len(names) < 2 {
 					continue
 				}
 				source := names[0]
@@ -113,32 +108,17 @@ func installCommand() *cobra.Command {
 				}
 				settings.Share[string(id)] = source
 			}
-			if !hasAlias(settings.Aliases, "dvsw") && (yes || confirm(reader, out, "Add 'dvsw' as a shortcut for devswitch?", true)) {
-				if err := validateAlias("dvsw"); err != nil {
-					fmt.Fprintf(out, "Skipped dvsw: %v\n", err)
-				} else {
-					settings.Aliases = append(settings.Aliases, Alias{Name: "dvsw"})
-				}
-			}
 			if !yes {
-				for _, item := range store.Profiles {
-					prefix := "cx"
-					switch item.Provider {
-					case provider.Claude:
-						prefix = "cl"
-					case provider.Gemini:
-						prefix = "gm"
+				fmt.Fprint(out, "Optional shortcut for devswitch (enter your own name, or press Enter to skip): ")
+				line, err := reader.ReadString('\n')
+				if err != nil && err != io.EOF {
+					return err
+				}
+				if name := strings.TrimSpace(line); name != "" && !hasAlias(settings.Aliases, name) {
+					if err := validateAlias(name); err != nil {
+						return err
 					}
-					name := prefix + "-" + item.Name
-					if hasAlias(settings.Aliases, name) {
-						continue
-					}
-					if validateAlias(name) != nil {
-						continue
-					}
-					if confirm(reader, out, fmt.Sprintf("Add '%s' to launch %s/%s?", name, item.Provider, item.Name), false) {
-						settings.Aliases = append(settings.Aliases, Alias{Name: name, Provider: string(item.Provider), Profile: item.Name})
-					}
+					settings.Aliases = append(settings.Aliases, Alias{Name: name})
 				}
 			}
 			if err := installShell(cmd.Root(), sh, settings.Aliases); err != nil {
@@ -163,7 +143,7 @@ func installCommand() *cobra.Command {
 			return nil
 		},
 	}
-	command.Flags().BoolVarP(&yes, "yes", "y", false, "accept defaults: completion, detected profiles, and dvsw shortcut")
+	command.Flags().BoolVarP(&yes, "yes", "y", false, "set up completion and detected profiles without prompts or new aliases")
 	command.Flags().StringVar(&shell, "shell", "", "shell to configure (bash, zsh, fish; default: SHELL)")
 	return command
 }
