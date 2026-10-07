@@ -79,7 +79,7 @@ func TestFindExplainsMissingProfile(t *testing.T) {
 	}
 
 	for _, name := range []string{"work", "personal"} {
-		if _, err := store.Add(claude, name); err != nil {
+		if _, err := store.Add(claude, name, true); err != nil {
 			t.Fatal(err)
 		}
 	}

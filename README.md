@@ -34,7 +34,7 @@ Each account keeps its own login and its own conversations.
 
    Open a second Terminal window to use another account at the same time.
 
-Already logged in before installing devswitch? Setup offers to keep that login as your `personal` account.
+Already logged in before installing devswitch? Setup keeps that login as your `personal` account automatically.
 
 ## Words you will see
 
@@ -47,7 +47,7 @@ Already logged in before installing devswitch? Setup offers to keep that login a
 
 ## Questions
 
-**Will I lose my current login?** No. Setup can keep your existing login as an account; nothing is logged out.
+**Will I lose my current login?** No. Setup keeps your existing login as your `personal` account; nothing is logged out.
 
 **Does devswitch see or store my password?** No. Logging in happens in the official Claude, Codex or Gemini window. devswitch only tells each tool which folder to use.
 
