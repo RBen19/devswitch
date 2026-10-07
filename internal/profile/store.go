@@ -169,10 +169,22 @@ func (s *Store) create(p provider.Provider, name, adoptedHome string, noShare bo
 }
 
 func (s *Store) Find(p provider.ID, name string) (Profile, error) {
+	var names []string
 	for _, item := range s.Profiles {
-		if item.Provider == p && item.Name == name {
+		if item.Provider != p {
+			continue
+		}
+		if item.Name == name {
 			return item, nil
 		}
+		names = append(names, item.Name)
 	}
-	return Profile{}, fmt.Errorf("profile not found: %s/%s", p, name)
+	label := string(p)
+	if def, err := provider.Parse(string(p)); err == nil {
+		label = def.Name
+	}
+	if len(names) == 0 {
+		return Profile{}, fmt.Errorf("no %s account named %q yet. Create it with: devswitch add %s %s", label, name, p, name)
+	}
+	return Profile{}, fmt.Errorf("no %s account named %q. Your %s accounts: %s", label, name, label, strings.Join(names, ", "))
 }

@@ -149,3 +149,41 @@ func readProviderOutput(t *testing.T, path string) string {
 	}
 	return string(data)
 }
+
+func TestFriendlyErrorsWithCompiledBinary(t *testing.T) {
+	temp := t.TempDir()
+	home := filepath.Join(temp, "home")
+	emptyBin := filepath.Join(temp, "empty-bin")
+	fakeBin := filepath.Join(temp, "fake-bin")
+	for _, dir := range []string{home, emptyBin, fakeBin} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFakeProvider(t, filepath.Join(fakeBin, "claude"))
+	devswitch := filepath.Join(temp, "devswitch")
+	build := exec.Command("go", "build", "-o", devswitch, "./cmd/devswitch")
+	build.Dir = projectRoot(t)
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build failed: %v\n%s", err, output)
+	}
+	run := func(path string, args ...string) (string, error) {
+		command := exec.Command(devswitch, args...)
+		command.Env = append(os.Environ(), "HOME="+home, "PATH="+path, "DEVSWITCH_E2E_OUTPUT="+filepath.Join(temp, "out"))
+		output, err := command.CombinedOutput()
+		return string(output), err
+	}
+
+	output, err := run(emptyBin, "run", "claude", "work")
+	if err == nil || !strings.Contains(output, "Claude Code isn't installed yet") || !strings.Contains(output, "https://code.claude.com/docs/en/setup") {
+		t.Fatalf("missing provider: err=%v\n%s", err, output)
+	}
+
+	if _, err := run(fakeBin, "add", "claude", "work"); err != nil {
+		t.Fatal(err)
+	}
+	output, err = run(fakeBin, "run", "claude", "wrk")
+	if err == nil || !strings.Contains(output, "Your Claude Code accounts: work") {
+		t.Fatalf("wrong profile name: err=%v\n%s", err, output)
+	}
+}
