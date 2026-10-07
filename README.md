@@ -1,8 +1,66 @@
 # devswitch
 
-> Switch cleanly between Claude Code, Codex, and Gemini CLI profiles. · by RBen19
+> Use your work and personal AI accounts on the same computer, without logging out. · by RBen19
 
-`devswitch` is a small local CLI that keeps Claude Code, Codex, and Gemini CLI logins isolated. It delegates authentication to the official provider CLIs and never reads, copies, or manages credentials.
+devswitch lets you keep several accounts for **Claude Code**, **Codex** and **Gemini CLI** side by side —
+for example a personal account and a work account — and open the one you need with a single command.
+Each account keeps its own login and its own conversations.
+
+![devswitch demo](docs/demo.gif)
+
+## Get started in 3 steps
+
+1. **Install** — open the Terminal app, paste this line and press Enter:
+
+   ```bash
+   curl -fsSL https://github.com/RBen19/devswitch/releases/latest/download/install.sh | bash
+   ```
+
+   It asks a few yes/no questions. Pressing Enter accepts the safe default.
+2. **Add an account** — give it any name you like:
+
+   ```bash
+   devswitch add claude work
+   devswitch login claude work
+   ```
+
+   The official Claude, Codex or Gemini login opens. devswitch never sees your password.
+3. **Use it** — open that account whenever you need it:
+
+   ```bash
+   devswitch run claude work
+   ```
+
+   Open a second Terminal window to use another account at the same time.
+
+Already logged in before installing devswitch? Setup offers to keep that login as your `personal` account.
+
+## Words you will see
+
+| Word | Meaning |
+| --- | --- |
+| Terminal | The app where you type commands (Terminal on macOS; Terminal or Console on Linux). |
+| Profile / account | One login for one AI, with a name you choose, like `work` or `personal`. |
+| Provider | The AI tool: `claude` (Claude Code), `codex` (Codex) or `gemini` (Gemini CLI). |
+| PATH | The list of places your computer looks for commands. Setup handles it for you. |
+
+## Questions
+
+**Will I lose my current login?** No. Setup can keep your existing login as an account; nothing is logged out.
+
+**Does devswitch see or store my password?** No. Logging in happens in the official Claude, Codex or Gemini window. devswitch only tells each tool which folder to use.
+
+**It says the AI "isn't installed yet".** devswitch opens these tools but does not install them. Follow the link in the message, then try again.
+
+**It says there is "no account named …".** Check the spelling; the message lists the accounts you have. `devswitch list` shows them all.
+
+**Can I undo everything?** Yes: `devswitch uninstall` removes the shell setup; add `--purge` to also delete the accounts devswitch created.
+
+**Does it work on Windows?** Not yet. macOS and Linux are supported today.
+
+---
+
+# For developers
 
 ## Why devswitch exists
 
@@ -203,7 +261,7 @@ By default, all five categories below are selected. Use `--only` with a comma-se
 
 | Category | Codex paths | Claude paths |
 | --- | --- | --- |
-| `sessions` | `sessions/`, `archived_sessions/`, `history.jsonl`, `session_index.jsonl` | `projects/` (including project memory), `history.jsonl`, `file-history/`, `tasks/`, `plans/` |
+| `sessions` | `sessions/`, `archived_sessions/`, `history.jsonl`, `session_index.jsonl`, `state_5.sqlite` | `projects/` (including project memory), `history.jsonl`, `file-history/`, `tasks/`, `plans/` |
 | `skills` | `skills/` | `skills/` |
 | `agents` | `agents/`, `AGENTS.md`, `AGENTS.override.md` | `agents/`, `agent-memory/`, `CLAUDE.md` |
 | `rules` | `rules/` | `rules/` |
@@ -213,7 +271,7 @@ Missing directories and JSONL files are initialized in the source. Instruction f
 
 Existing target paths are renamed to `<path>.devswitch-backup` (with a numeric suffix if needed). Their contents are first merged into the shared data: missing files and folders are copied, JSONL histories are appended, and on a name clash the source's file wins while the target's version stays in the backup. The backup keeps the complete original. The command prints every link and backup path. `--dry-run` makes no filesystem changes. If linking fails, completed replacements are rolled back.
 
-Credentials, provider settings (`config.toml`, `settings.json`), plugins, caches, and SQLite databases remain per-profile. Custom paths configured in provider settings are not discovered. Codex agent definitions that require entries in `config.toml` still need those entries in each profile. User-wide skills outside the profile home are already independent of devswitch. Provider versions may use local database indexes for session lists; linking transcript files does not synchronize those indexes or guarantee every session appears in a provider's picker.
+Credentials, provider settings (`config.toml`, `settings.json`), plugins and caches remain per-profile. SQLite databases also stay per-profile, except Codex's thread list `state_5.sqlite`, which is shared with `sessions` so shared conversations appear in Codex's picker; its threads are merged with the target's when sharing starts (requires the `sqlite3` command). Custom paths configured in provider settings are not discovered. Codex agent definitions that require entries in `config.toml` still need those entries in each profile. User-wide skills outside the profile home are already independent of devswitch.
 
 Keep the source profile in place while its links are in use. To undo sharing, close the agents, remove the target symlink, and rename its printed backup back to the original path (or create a new empty directory/file if there was no backup). Removing a symlink does not delete its source data. `uninstall --purge` deletes managed source profiles and backups too, so adopted profiles pointing into them would be left with broken links.
 
