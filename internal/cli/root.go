@@ -48,7 +48,7 @@ func NewRootCommand() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	root.AddCommand(aliasCommand(), doctorCommand(), shareCommand(), addCommand(), listCommand(), loginCommand(), runCommand(), installCommand(), uninstallCommand(), discoverCommand(), adoptCommand(), shortcutCommand("cl", provider.Claude), shortcutCommand("cx", provider.Codex), shortcutCommand("gm", provider.Gemini))
+	root.AddCommand(aliasCommand(), doctorCommand(), shareCommand(), addCommand(), listCommand(), loginCommand(), runCommand(), settingsCommand(), optionsCommand(), continueCommand(), handoffsCommand(), installCommand(), uninstallCommand(), discoverCommand(), adoptCommand(), shortcutCommand("cl", provider.Claude), shortcutCommand("cx", provider.Codex), shortcutCommand("gm", provider.Gemini))
 	for _, cmd := range root.Commands() {
 		if cmd.Name() == "install" || cmd.Name() == "uninstall" {
 			serializeShellCommand(cmd)
@@ -153,14 +153,24 @@ func loginCommand() *cobra.Command {
 
 func runCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:     "run <claude|codex|gemini> <name> [-- args...]",
-		Short:   "Run a tool with a profile",
-		Args:    cobra.MinimumNArgs(2),
-		Example: "  devswitch run claude personal\n  devswitch run codex work -- --full-auto",
+		Use:                "run <claude|codex|gemini> <name> [args...]",
+		Short:              "Run a tool with a profile",
+		Args:               cobra.MinimumNArgs(2),
+		DisableFlagParsing: true,
+		Example:            "  devswitch run claude personal --dangerously-skip-permissions\n  devswitch run codex work --full-auto",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return launch(cmd.Context(), cmd.OutOrStdout(), args[0], args[1], false, args[2:])
+			return launch(cmd.Context(), cmd.OutOrStdout(), args[0], args[1], false, providerArgs(args[2:]))
 		},
 	}
+}
+
+// A separator is optional on provider launch commands. Accept it for backward
+// compatibility, but never pass it through to the provider executable.
+func providerArgs(args []string) []string {
+	if len(args) > 0 && args[0] == "--" {
+		return args[1:]
+	}
+	return args
 }
 
 func launch(ctx context.Context, out io.Writer, providerName, name string, login bool, args []string) error {
@@ -183,6 +193,12 @@ func launch(ctx context.Context, out io.Writer, providerName, name string, login
 	commandArgs := args
 	if login {
 		commandArgs = p.LoginArgs
+	} else {
+		settings, err := loadLaunchSettings()
+		if err != nil {
+			return err
+		}
+		commandArgs = append(append([]string(nil), settings.Providers[string(p.ID)].Args...), args...)
 	}
 	if p.ID == provider.Claude && login {
 		fmt.Fprintln(out, "Claude Code is starting. Type /login in the session to authenticate.")

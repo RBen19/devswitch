@@ -87,11 +87,12 @@ func adoptCommand() *cobra.Command {
 
 func shortcutCommand(use string, p provider.ID) *cobra.Command {
 	return &cobra.Command{
-		Use:     use + " <profile> [-- args...]",
-		Aliases: []string{string(p)},
-		Short:   "Run " + string(p) + " with a short command",
-		Args:    cobra.MinimumNArgs(1),
-		Example: "  dvsw " + use + " p\n  dvsw " + use + " work",
+		Use:                use + " <profile> [args...]",
+		Aliases:            []string{string(p)},
+		Short:              "Run " + string(p) + " with a short command",
+		Args:               cobra.MinimumNArgs(1),
+		DisableFlagParsing: true,
+		Example:            "  dvsw " + use + " p\n  dvsw " + use + " work",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if name == "p" {
@@ -100,7 +101,7 @@ func shortcutCommand(use string, p provider.ID) *cobra.Command {
 			if name == "w" {
 				name = "work"
 			}
-			return launch(cmd.Context(), cmd.OutOrStdout(), string(p), name, false, args[1:])
+			return launch(cmd.Context(), cmd.OutOrStdout(), string(p), name, false, providerArgs(args[1:]))
 		},
 	}
 }

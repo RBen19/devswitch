@@ -229,11 +229,43 @@ devswitch run claude work
 devswitch run codex personal
 ```
 
-You can run different profiles at the same time in separate terminals. Pass arguments to the underlying CLI after `--`:
+You can run different profiles at the same time in separate terminals. Options after the provider and profile are passed directly to that provider; `--` is optional:
 
 ```bash
-devswitch run codex work -- --full-auto
+devswitch run claude bpe --dangerously-skip-permissions --continue --resume a6d6f0d1-ff77-4788-b657-3acf4212b2bc
+devswitch run codex work --full-auto
 ```
+
+The older separator form still works too: `devswitch run codex work -- --full-auto`.
+
+Provider-wide default arguments can be saved in `~/.devswitch/settings.json`; they apply to every profile for that provider. Create a starter file with `devswitch settings init`, then edit it. Configured arguments are sent before command-line arguments; options typed for one launch come last and take priority when the provider supports that behavior. Use `devswitch settings path` to print the file location.
+
+```json
+{
+  "providers": {
+    "claude": { "args": ["--continue"] },
+    "codex": { "args": ["--full-auto"] },
+    "gemini": { "args": [] }
+  }
+}
+```
+
+Use `devswitch options claude` (or `codex` / `gemini`) to show the installed provider's own current help. This avoids maintaining a stale allowlist: `devswitch` passes provider arguments through, including options it does not know about.
+
+### Continue work with another AI
+
+Switch providers or profiles in the same project and carry the latest conversation over in either direction:
+
+```bash
+devswitch continue claude personal codex work
+devswitch continue codex work claude personal
+```
+
+Run the command from the project folder. devswitch finds the most recent session from that provider/profile for this folder, copies the conversation excerpts and file paths into a private note under `~/.devswitch/handoffs` (directory mode `0700`, note mode `0600`), then starts the target profile with a prompt to read it. The note stays on your computer; devswitch does not send it to a separate service. This starts a new provider conversation seeded with context; it does not merge the providers' native histories.
+
+For Gemini/Antigravity, the first response is printed in one-shot mode. Continue that new conversation in its interactive interface with `devswitch run gemini work --continue`. Manage retained notes with `devswitch handoffs list` and `devswitch handoffs delete <filename>`.
+
+Claude and Codex profiles can also optionally share their native session files using `devswitch share`; that is separate from this cross-provider hand-off. Gemini session-file sharing is not supported.
 
 Shortcuts are available after `devswitch install` and a shell reload:
 
@@ -273,7 +305,7 @@ Missing directories and JSONL files are initialized in the source. Agent instruc
 
 Existing target paths are renamed to `<path>.devswitch-backup` (with a numeric suffix if needed). Their contents are first merged into the shared data: missing files and folders are copied, JSONL histories are appended, and on a name clash the source's file wins while the target's version stays in the backup. The backup keeps the complete original. The command prints every link and backup path. `--dry-run` makes no filesystem changes. If linking fails, completed replacements are rolled back.
 
-Credentials, provider settings (`config.toml`, `settings.json`), plugins and caches remain per-profile. SQLite databases also stay per-profile, except Codex's thread list `state_5.sqlite`, which is shared with `sessions` so shared conversations appear in Codex's picker; its threads are merged with the target's when sharing starts (requires the `sqlite3` command). Custom paths configured in provider settings are not discovered. Codex agent definitions that require entries in `config.toml` still need those entries in each profile. User-wide skills outside the profile home are already independent of devswitch.
+Credentials and each provider’s own settings (such as Claude or Gemini `settings.json` and Codex `config.toml`), plugins and caches remain per-profile. devswitch launch defaults live separately in the global `~/.devswitch/settings.json`. SQLite databases also stay per-profile, except Codex's thread list `state_5.sqlite`, which is shared with `sessions` so shared conversations appear in Codex's picker; its threads are merged with the target's when sharing starts (requires the `sqlite3` command). Custom paths configured in provider settings are not discovered. Codex agent definitions that require entries in `config.toml` still need those entries in each profile. User-wide skills outside the profile home are already independent of devswitch.
 
 Keep the source profile in place while its links are in use. To undo sharing, close the agents, remove the target symlink, and rename its printed backup back to the original path (or create a new empty directory/file if there was no backup). Removing a symlink does not delete its source data. `uninstall --purge` deletes managed source profiles and backups too, so adopted profiles pointing into them would be left with broken links.
 
